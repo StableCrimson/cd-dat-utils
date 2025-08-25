@@ -1,0 +1,4 @@
+.venv/
+*.DAT
+output/
+.DS_Store
