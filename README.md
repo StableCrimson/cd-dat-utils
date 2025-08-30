@@ -9,6 +9,12 @@ Currently no support for encrypted or compressed files at this time.
 
 ## Usage
 
+First, make sure to install the requirements via:
+
+```bash
+pip install -r requirements.txt
+```
+
 To unpack a BIGFILE:
 
 ```bash
