@@ -2,3 +2,4 @@
 *.DAT
 output/
 .DS_Store
+*.json

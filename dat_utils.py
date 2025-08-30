@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from io import BufferedReader, BufferedWriter
 import os
 import json
@@ -10,13 +9,16 @@ from pydantic import BaseModel, Field
 # Cross referenced with Soul Spiral and decompiled code from the soul-re project
 # None of the files in Soul Reaver appear to be compressed or encrypted
 
+FOLDER_ENTRY_SIZE = 8
+FILE_ENTRY_SIZE = 16
+
 
 class FileEntry(BaseModel):
     size: int
     offset: int
     hash: int
     checksum: int
-    contents: bytes = Field(exclude=True)
+    contents: bytes | None = Field(exclude=True, default=None)
 
 
 class FolderEntry(BaseModel):
@@ -28,16 +30,16 @@ class FolderEntry(BaseModel):
 
 
 class BigFile(BaseModel):
+    size_bytes: int
     num_folders: int
     folder_list: list[FolderEntry]
-    unmapped_data: FileEntry | None = None
+    unmapped_data: FileEntry | None = Field(exclude=True, default=None)
 
 
 CONFIG = {}
 
 
 def hash_from_file_path(file_path: str) -> int:
-
     HASH_EXTENSIONS = ["drm", "crm", "tim", "smp", "snd", "smf", "snf"]
 
     sum = 0
@@ -99,11 +101,17 @@ def read_folder(file: BufferedReader, offset: int) -> FolderEntry:
     )
 
     file.seek(folder_offset)
-    assert int.from_bytes(file.read(2), "little") == num_files
-    assert file.read(2) == b"\x00\x00"
+    num_files_record = int.from_bytes(file.read(2), "little")
+    assert (
+        file.read(2) == b"\x00\x00"
+    ), "Encrypted bytes found. Encryption not supported at this time."
+
+    assert (
+        num_files == num_files_record
+    ), f"Mismatch between number of files in folder entry and folder record. Entry: {num_files} Record: {num_files_record}"
 
     for i in range(num_files):
-        entry_offset = (i * 0x10) + folder_offset + 4
+        entry_offset = (i * FILE_ENTRY_SIZE) + folder_offset + 4
         folder.file_list.append(read_file(file, entry_offset))
 
     return folder
@@ -111,27 +119,24 @@ def read_folder(file: BufferedReader, offset: int) -> FolderEntry:
 
 def from_dat(path: str, config_path: str) -> BigFile:
     with open(path, "rb") as file:
-
         file.seek(0, os.SEEK_END)
         size = file.tell()
         file.seek(0)
 
-        CONFIG["dat_size_bytes"] = size
-
-        with open(config_path, "w") as f:
-            json.dump(CONFIG, f, indent=2)
-
         bigfile = BigFile(
-            num_folders=int.from_bytes(file.read(2), "little"), folder_list=[]
+            size_bytes=size,
+            num_folders=int.from_bytes(file.read(2), "little"),
+            folder_list=[],
         )
         assert file.read(2) == b"\x00\x00"
 
         for i in range(bigfile.num_folders):
-            offset = (i * 8) + 4
+            offset = (i * FOLDER_ENTRY_SIZE) + 4
             bigfile.folder_list.append(read_folder(file, offset))
 
-        if CONFIG.get("unmapped_data") is not None:
-            unmapped_data = CONFIG["unmapped_data"]
+        unmapped_data = CONFIG.get("unmapped_data")
+
+        if unmapped_data is not None:
             file.seek(unmapped_data["offset"])
 
             bigfile.unmapped_data = FileEntry(
@@ -142,32 +147,32 @@ def from_dat(path: str, config_path: str) -> BigFile:
                 contents=file.read(unmapped_data["size"]),
             )
 
+        if CONFIG.get("structure") is None:
+            print(f"File structure not found in config. Writing...")
+            CONFIG["structure"] = bigfile.model_dump()
+            with open(config_path, "w") as f:
+                json.dump(CONFIG, f, indent=2)
+
         return bigfile
 
 
 def unpack_bigfile(bigfile: BigFile, output_dir: str) -> None:
-
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
 
     os.makedirs(output_dir)
 
-    if CONFIG.get("unmapped_data") and bigfile.unmapped_data:
-        unmapped_data = CONFIG["unmapped_data"]
-        with open(os.path.join(output_dir, unmapped_data["name"]), "wb") as f:
+    if bigfile.unmapped_data:
+        with open(os.path.join(output_dir, "UNMAPPED_DATA.bin"), "wb") as f:
             f.write(bigfile.unmapped_data.contents)
 
     duplicates = {}
-    folder_magic = {}
 
-    for folder_idx, folder in enumerate(bigfile.folder_list):
-
-        folder_magic[folder_idx] = folder.magic
-
+    for folder in bigfile.folder_list:
         for file in folder.file_list:
-
-            file_data = CONFIG.get(str(file.hash), {})
-            file_name = file_data["name"]
+            file_name = CONFIG.get("file_names", {}).get(
+                str(file.hash), f"{file.hash}.bin"
+            )
 
             if file_name not in duplicates.keys():
                 duplicates[file_name] = 0
@@ -179,12 +184,8 @@ def unpack_bigfile(bigfile: BigFile, output_dir: str) -> None:
             with open(os.path.join(output_dir, file_name), "wb") as outfile:
                 outfile.write(file.contents)
 
-    with open("folder_magic_data.json", "w") as f:
-        json.dump(folder_magic, f, indent=2)
-
 
 def write_file(file: FileEntry, header_offset: int, writer: BufferedWriter):
-
     writer.seek(header_offset)
     writer.write(file.hash.to_bytes(4, "little"))
     writer.write(file.size.to_bytes(4, "little"))
@@ -196,7 +197,6 @@ def write_file(file: FileEntry, header_offset: int, writer: BufferedWriter):
 
 
 def write_folder(folder: FolderEntry, header_offset: int, writer: BufferedWriter):
-
     writer.seek(header_offset)
 
     # Folder header
@@ -210,25 +210,21 @@ def write_folder(folder: FolderEntry, header_offset: int, writer: BufferedWriter
     writer.write(HALFWORD_PADDING)
 
     for i, file in enumerate(folder.file_list):
-        offset = (i * 16) + folder.offset + 4
+        offset = (i * FILE_ENTRY_SIZE) + folder.offset + 4
         write_file(file, offset, writer)
 
 
 def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
 
-    if CONFIG.get("dat_size_bytes") is None:
-        raise Exception("Field 'dat_size_bytes' not found in config")
-
     with open(output_path, "wb", 0) as f:
-        with BufferedWriter(f, CONFIG["dat_size_bytes"]) as file_data:
-
+        with BufferedWriter(f, bigfile.size_bytes) as file_data:
             HALFWORD_PADDING = b"\x00\x00"
 
             file_data.write(bigfile.num_folders.to_bytes(2, "little"))
             file_data.write(HALFWORD_PADDING)
 
             for i, folder in enumerate(bigfile.folder_list):
-                offset = (i * 8) + 4
+                offset = (i * FOLDER_ENTRY_SIZE) + 4
                 write_folder(folder, offset, file_data)
 
             if bigfile.unmapped_data:
@@ -237,100 +233,54 @@ def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
 
 
 def from_unpacked(input_dir: str, json_config: str) -> BigFile:
-
     if not os.path.exists(input_dir):
         raise Exception(f"Input directory {input_dir} does not exist")
 
     if not os.path.exists(json_config):
         raise Exception(f"JSON config file {json_config} does not exist")
 
-    if not os.path.exists("folder_magic_data.json"):
-        print(
-            "Warning, no magic data found for DAT file. Writing null bytes to magic data segments"
-        )
-        folder_magic = {}
-    else:
-        with open("folder_magic_data.json", "r") as f:
-            folder_magic = json.load(f)
+    if CONFIG.get("structure") is None:
+        raise Exception("'structure' does not exist in config file!")
 
-    unmapped_data = CONFIG.get("unmapped_data", {})
+    bigfile = BigFile.model_validate_json(json.dumps(CONFIG["structure"]))
 
-    bigfile = BigFile(num_folders=0, folder_list=[])
+    read_files = {}
+    file_names = CONFIG.get("file_names", {})
 
-    file_structure = {}
+    for folder in bigfile.folder_list:
+        for file in folder.file_list:
+            file_name = file_names.get(str(file.hash), f"{file.hash}.bin")
 
-    for file in os.listdir(input_dir):
+            if read_files.get(file_name) is None:
+                read_files[file_name] = 0
+            else:
+                read_files[file_name] += 1
+                name, ext = file_name.rsplit(".", 1)
+                file_name = f"{name}_duplicate{read_files[file_name]}.{ext}"
 
-        if file == unmapped_data.get("name"):
-            with open(os.path.join(input_dir, file), "rb") as f:
-                contents = f.read()
+            full_file_path = os.path.join(input_dir, file_name)
+
+            if not os.path.exists(full_file_path):
+                raise Exception(f"File {full_file_path} cannot be found!")
+
+            with open(full_file_path, "rb") as f:
+                file.contents = f.read()
+
+    unmapped_data = CONFIG.get("unmapped_data")
+    if unmapped_data is not None:
+        with open(os.path.join(input_dir, "UNMAPPED_DATA.bin"), "rb") as f:
             bigfile.unmapped_data = FileEntry(
-                size=unmapped_data.get("size"),
-                offset=unmapped_data.get("offset"),
+                size=unmapped_data["size"],
+                offset=unmapped_data["offset"],
                 hash=0,
                 checksum=0,
-                contents=contents,
+                contents=f.read(),
             )
-            continue
 
-        file_name, ext = file.split(".")
-        file_duplicate_index = 0
-
-        components = file_name.split("_")
-        if len(components) > 1 and components[-1].startswith("duplicate"):
-            file_name = "_".join(components[:-1])
-            file_duplicate_index = int(components[-1].strip("duplicate"))
-
-        if components[0] != "UNKNOWN":
-            file_hash = hash_from_file_path(f"{file_name}.{ext}")
-        else:
-            file_hash = int(components[1], 16)
-
-        file_record = CONFIG[str(file_hash)]
-        file_data_for_folder = file_record["folders"][file_duplicate_index]
-
-        with open(os.path.join(input_dir, file), "rb") as f:
-            contents = f.read()
-
-        file_entry = FileEntry(
-            size=file_data_for_folder["size"],
-            offset=file_data_for_folder["offset"],
-            hash=file_hash,
-            checksum=file_data_for_folder["checksum"],
-            contents=contents,
-        )
-
-        if file_structure.get(file_data_for_folder["folder"]) is None:
-            file_structure[file_data_for_folder["folder"]] = {"files": {}}
-
-        file_structure[file_data_for_folder["folder"]]["offset"] = file_data_for_folder[
-            "folder_offset"
-        ]
-        file_structure[file_data_for_folder["folder"]]["files"][
-            file_data_for_folder["file"]
-        ] = file_entry
-
-    for i in range(len(file_structure)):
-
-        folder_structure = file_structure[i]
-        folder_entry = FolderEntry(
-            num_files=0, offset=0, magic=0, encryption=0, file_list=[]
-        )
-        folder_entry.offset = folder_structure["offset"]
-        folder_entry.magic = folder_magic.get(str(i), 0)
-
-        for j in range(len(folder_structure["files"])):
-            folder_entry.file_list.append(folder_structure["files"][j])
-
-        folder_entry.num_files = len(folder_entry.file_list)
-        bigfile.folder_list.append(folder_entry)
-
-    bigfile.num_folders = len(bigfile.folder_list)
     return bigfile
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument("operation", choices={"unpack", "pack"})
     parser.add_argument("input", help="Path to source")
