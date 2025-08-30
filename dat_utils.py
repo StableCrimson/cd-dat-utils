@@ -185,8 +185,8 @@ def unpack_bigfile(bigfile: BigFile, output_dir: str) -> None:
             full_path = os.path.join(output_dir, file_name)
 
             if "\\" in file_name:
-                subfolders, file_name = file_name.rsplit("\\", 1)
-                subpath = os.path.join(output_dir, *subfolders.split("\\"))
+                *subfolders, file_name = file_name.split("\\")
+                subpath = os.path.join(output_dir, *subfolders)
 
                 if not os.path.exists(subpath):
                     Path(subpath).mkdir(parents=True, exist_ok=True)
@@ -276,8 +276,8 @@ def from_unpacked(input_dir: str, json_config: str) -> BigFile:
             full_file_path = os.path.join(input_dir, file_name)
 
             if "\\" in file_name:
-                subfolders, file_name = file_name.rsplit("\\", 1)
-                subpath = os.path.join(input_dir, *subfolders.split("\\"))
+                *subfolders, file_name = file_name.split("\\")
+                subpath = os.path.join(input_dir, *subfolders)
 
                 full_file_path = os.path.join(subpath, file_name)
 
