@@ -3,6 +3,7 @@ import os
 import json
 import shutil
 import argparse
+from pathlib import Path
 from pydantic import BaseModel, Field
 
 # BIGFILE spec from https://psx-spx.consoledev.net/cdromfileformats/#legacy-of-kain-soul-reaver-bigfiledat
@@ -162,7 +163,7 @@ def unpack_bigfile(bigfile: BigFile, output_dir: str) -> None:
 
     os.makedirs(output_dir)
 
-    if bigfile.unmapped_data:
+    if bigfile.unmapped_data and bigfile.unmapped_data.contents:
         with open(os.path.join(output_dir, "UNMAPPED_DATA.bin"), "wb") as f:
             f.write(bigfile.unmapped_data.contents)
 
@@ -181,19 +182,33 @@ def unpack_bigfile(bigfile: BigFile, output_dir: str) -> None:
                 base, ext = os.path.splitext(file_name)
                 file_name = f"{base}_duplicate{duplicates[file_name]}{ext}"
 
-            with open(os.path.join(output_dir, file_name), "wb") as outfile:
-                outfile.write(file.contents)
+            full_path = os.path.join(output_dir, file_name)
+
+            if "\\" in file_name:
+                subfolders, file_name = file_name.rsplit("\\", 1)
+                subpath = os.path.join(output_dir, *subfolders.split("\\"))
+
+                if not os.path.exists(subpath):
+                    Path(subpath).mkdir(parents=True, exist_ok=True)
+
+                full_path = os.path.join(subpath, file_name)
+
+            if file.contents:
+                with open(full_path, "wb") as outfile:
+                    outfile.write(file.contents)
 
 
 def write_file(file: FileEntry, header_offset: int, writer: BufferedWriter):
-    writer.seek(header_offset)
-    writer.write(file.hash.to_bytes(4, "little"))
-    writer.write(file.size.to_bytes(4, "little"))
-    writer.write(file.offset.to_bytes(4, "little"))
-    writer.write(file.checksum.to_bytes(4, "little"))
+    if file.contents:
+        writer.seek(header_offset)
+        writer.write(file.hash.to_bytes(4, "little"))
+        writer.write(file.size.to_bytes(4, "little"))
+        writer.write(file.offset.to_bytes(4, "little"))
+        writer.write(file.checksum.to_bytes(4, "little"))
 
-    writer.seek(file.offset)
-    writer.write(file.contents)
+        writer.seek(file.offset)
+
+        writer.write(file.contents)
 
 
 def write_folder(folder: FolderEntry, header_offset: int, writer: BufferedWriter):
@@ -227,7 +242,7 @@ def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
                 offset = (i * FOLDER_ENTRY_SIZE) + 4
                 write_folder(folder, offset, file_data)
 
-            if bigfile.unmapped_data:
+            if bigfile.unmapped_data and bigfile.unmapped_data.contents:
                 file_data.seek(bigfile.unmapped_data.offset)
                 file_data.write(bigfile.unmapped_data.contents)
 
@@ -259,6 +274,12 @@ def from_unpacked(input_dir: str, json_config: str) -> BigFile:
                 file_name = f"{name}_duplicate{read_files[file_name]}.{ext}"
 
             full_file_path = os.path.join(input_dir, file_name)
+
+            if "\\" in file_name:
+                subfolders, file_name = file_name.rsplit("\\", 1)
+                subpath = os.path.join(input_dir, *subfolders.split("\\"))
+
+                full_file_path = os.path.join(subpath, file_name)
 
             if not os.path.exists(full_file_path):
                 raise Exception(f"File {full_file_path} cannot be found!")
