@@ -23,7 +23,6 @@ class FileEntry(BaseModel):
 
 
 class FolderEntry(BaseModel):
-    num_files: int
     offset: int
     magic: int
     encryption: int
@@ -32,7 +31,6 @@ class FolderEntry(BaseModel):
 
 class BigFile(BaseModel):
     size_bytes: int
-    num_folders: int
     folder_list: list[FolderEntry]
     unmapped_data: FileEntry | None = Field(exclude=True, default=None)
 
@@ -94,7 +92,6 @@ def read_folder(file: BufferedReader, offset: int) -> FolderEntry:
     num_files = int.from_bytes(file.read(2), "little")
     folder_offset = int.from_bytes(file.read(4), "little")
     folder = FolderEntry(
-        num_files=num_files,
         offset=folder_offset,
         magic=magic,
         encryption=0,  # TODO
@@ -126,12 +123,13 @@ def from_dat(path: str, config_path: str) -> BigFile:
 
         bigfile = BigFile(
             size_bytes=size,
-            num_folders=int.from_bytes(file.read(2), "little"),
             folder_list=[],
         )
+
+        num_folders = int.from_bytes(file.read(2), "little")
         assert file.read(2) == b"\x00\x00"
 
-        for i in range(bigfile.num_folders):
+        for i in range(num_folders):
             offset = (i * FOLDER_ENTRY_SIZE) + 4
             bigfile.folder_list.append(read_folder(file, offset))
 
@@ -217,11 +215,11 @@ def write_folder(folder: FolderEntry, header_offset: int, writer: BufferedWriter
     # Folder header
     HALFWORD_PADDING = b"\x00\x00"
     writer.write(folder.magic.to_bytes(2, "little"))
-    writer.write(folder.num_files.to_bytes(2, "little"))
+    writer.write(len(folder.file_list).to_bytes(2, "little"))
     writer.write(folder.offset.to_bytes(4, "little"))
 
     writer.seek(folder.offset)
-    writer.write(folder.num_files.to_bytes(2, "little"))
+    writer.write(len(folder.file_list).to_bytes(2, "little"))
     writer.write(HALFWORD_PADDING)
 
     for i, file in enumerate(folder.file_list):
@@ -232,19 +230,19 @@ def write_folder(folder: FolderEntry, header_offset: int, writer: BufferedWriter
 def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
 
     with open(output_path, "wb", 0) as f:
-        with BufferedWriter(f, bigfile.size_bytes) as file_data:
+        with BufferedWriter(f, bigfile.size_bytes) as writer:
             HALFWORD_PADDING = b"\x00\x00"
 
-            file_data.write(bigfile.num_folders.to_bytes(2, "little"))
-            file_data.write(HALFWORD_PADDING)
+            writer.write(len(bigfile.folder_list).to_bytes(2, "little"))
+            writer.write(HALFWORD_PADDING)
 
             for i, folder in enumerate(bigfile.folder_list):
                 offset = (i * FOLDER_ENTRY_SIZE) + 4
-                write_folder(folder, offset, file_data)
+                write_folder(folder, offset, writer)
 
             if bigfile.unmapped_data and bigfile.unmapped_data.contents:
-                file_data.seek(bigfile.unmapped_data.offset)
-                file_data.write(bigfile.unmapped_data.contents)
+                writer.seek(bigfile.unmapped_data.offset)
+                writer.write(bigfile.unmapped_data.contents)
 
 
 def from_unpacked(input_dir: str, json_config: str) -> BigFile:
@@ -259,19 +257,19 @@ def from_unpacked(input_dir: str, json_config: str) -> BigFile:
 
     bigfile = BigFile.model_validate_json(json.dumps(CONFIG["structure"]))
 
-    read_files = {}
+    already_read_files = {}
     file_names = CONFIG.get("file_names", {})
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
             file_name = file_names.get(str(file.hash), f"{file.hash}.bin")
 
-            if read_files.get(file_name) is None:
-                read_files[file_name] = 0
+            if already_read_files.get(file_name) is None:
+                already_read_files[file_name] = 0
             else:
-                read_files[file_name] += 1
+                already_read_files[file_name] += 1
                 name, ext = file_name.rsplit(".", 1)
-                file_name = f"{name}_duplicate{read_files[file_name]}.{ext}"
+                file_name = f"{name}_duplicate{already_read_files[file_name]}.{ext}"
 
             full_file_path = os.path.join(input_dir, file_name)
 
@@ -288,6 +286,7 @@ def from_unpacked(input_dir: str, json_config: str) -> BigFile:
                 file.contents = f.read()
 
     unmapped_data = CONFIG.get("unmapped_data")
+
     if unmapped_data is not None:
         with open(os.path.join(input_dir, "UNMAPPED_DATA.bin"), "rb") as f:
             bigfile.unmapped_data = FileEntry(
