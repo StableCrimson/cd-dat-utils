@@ -6,10 +6,6 @@ import argparse
 from pathlib import Path
 from pydantic import BaseModel, Field
 
-# BIGFILE spec from https://psx-spx.consoledev.net/cdromfileformats/#legacy-of-kain-soul-reaver-bigfiledat
-# Cross referenced with Soul Spiral and decompiled code from the soul-re project
-# None of the files in Soul Reaver appear to be compressed or encrypted
-
 FOLDER_ENTRY_SIZE = 8
 FILE_ENTRY_SIZE = 16
 
@@ -30,7 +26,7 @@ class FolderEntry(BaseModel):
 
 
 class BigFile(BaseModel):
-    size_bytes: int
+    size: int
     folder_list: list[FolderEntry]
     unmapped_data: FileEntry | None = Field(exclude=True, default=None)
 
@@ -122,7 +118,7 @@ def from_dat(path: str, config_path: str) -> BigFile:
         file.seek(0)
 
         bigfile = BigFile(
-            size_bytes=size,
+            size=size,
             folder_list=[],
         )
 
@@ -212,15 +208,13 @@ def write_file(file: FileEntry, header_offset: int, writer: BufferedWriter):
 def write_folder(folder: FolderEntry, header_offset: int, writer: BufferedWriter):
     writer.seek(header_offset)
 
-    # Folder header
-    HALFWORD_PADDING = b"\x00\x00"
     writer.write(folder.magic.to_bytes(2, "little"))
     writer.write(len(folder.file_list).to_bytes(2, "little"))
     writer.write(folder.offset.to_bytes(4, "little"))
 
     writer.seek(folder.offset)
     writer.write(len(folder.file_list).to_bytes(2, "little"))
-    writer.write(HALFWORD_PADDING)
+    writer.write(b"\x00\x00")
 
     for i, file in enumerate(folder.file_list):
         offset = (i * FILE_ENTRY_SIZE) + folder.offset + 4
@@ -230,11 +224,10 @@ def write_folder(folder: FolderEntry, header_offset: int, writer: BufferedWriter
 def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
 
     with open(output_path, "wb", 0) as f:
-        with BufferedWriter(f, bigfile.size_bytes) as writer:
-            HALFWORD_PADDING = b"\x00\x00"
+        with BufferedWriter(f, bigfile.size) as writer:
 
             writer.write(len(bigfile.folder_list).to_bytes(2, "little"))
-            writer.write(HALFWORD_PADDING)
+            writer.write(b"\x00\x00")
 
             for i, folder in enumerate(bigfile.folder_list):
                 offset = (i * FOLDER_ENTRY_SIZE) + 4
