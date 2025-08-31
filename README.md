@@ -33,6 +33,12 @@ To pack a folder into a BIGFILE:
 python dat_utils.py pack <src_dir> <dest_file>
 ```
 
+To compare 2 BIGFILEs (packed or unpacked):
+
+```bash
+python dat_utils.py compare <path_a> <path_b>
+```
+
 The config path defaults to `config.json`, though a different path can be provided using `-c` or `--config`.
 
 ## Config

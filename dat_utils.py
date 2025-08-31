@@ -238,12 +238,9 @@ def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
                 writer.write(bigfile.unmapped_data.contents)
 
 
-def from_unpacked(input_dir: str, json_config: str) -> BigFile:
+def from_unpacked(input_dir: str) -> BigFile:
     if not os.path.exists(input_dir):
         raise Exception(f"Input directory {input_dir} does not exist")
-
-    if not os.path.exists(json_config):
-        raise Exception(f"JSON config file {json_config} does not exist")
 
     if CONFIG.get("structure") is None:
         raise Exception("'structure' does not exist in config file!")
@@ -293,16 +290,122 @@ def from_unpacked(input_dir: str, json_config: str) -> BigFile:
     return bigfile
 
 
+def compare_unmapped_data(a: FileEntry | None, b: FileEntry | None):
+
+    if a is None:
+        assert b is None, "Unmapped data mismatch! a has no unmapped data, but b does"
+        return
+
+    if b is None:
+        assert a is None, "Unmapped data mismatch! a has unmapped data, but b doesn't"
+        return
+
+    assert (
+        a.size == b.size
+    ), f"Size mismatch for unmapped data! a: {a.size} bytes, b: {b.size} bytes"
+
+    assert (
+        a.offset == b.offset
+    ), f"Offset mismatch for unmapped data! a: {a.offset}, b: {b.offset}"
+
+    assert a.contents == b.contents, "Content mismatch for unmapped data!"
+
+
+def compare_file(a: FileEntry, b: FileEntry, folder_idx: int, file_idx: int):
+
+    assert (
+        a.size == b.size
+    ), f"Mismatch between file sizes at folder {folder_idx} - file {file_idx}! a: {a.size} bytes, b: {b.size} bytes"
+
+    assert (
+        a.offset == b.offset
+    ), f"Mismatch between file offsets at folder {folder_idx} - file {file_idx}! a: {a.offset}, b: {b.offset}"
+
+    assert (
+        a.hash == b.hash
+    ), f"Mismatch between file hashes at folder {folder_idx} - file {file_idx}! a: {a.hash}, b: {b.hash}"
+
+    assert (
+        a.checksum == b.checksum
+    ), f"Mismatch between file checksums at folder {folder_idx} - file {file_idx}! a: {a.checksum}, b: {b.checksum}"
+
+    assert (
+        a.contents == b.contents
+    ), f"Mismatch between file contents at folder {folder_idx} - file {file_idx}!"
+
+
+def compare_folder(folder_a: FolderEntry, folder_b: FolderEntry, folder_idx: int):
+
+    assert len(folder_a.file_list) == len(
+        folder_b.file_list
+    ), f"Mismatch between number of files at folder {folder_idx}! a: {len(folder_a.file_list)}, b: {len(folder_b.file_list)}"
+
+    assert (
+        folder_a.offset == folder_b.offset
+    ), f"Mismatch between offsets at folder {folder_idx}! a: {folder_a.offset}, b: {folder_b.offset}"
+
+    assert (
+        folder_a.magic == folder_b.magic
+    ), f"Mismatch between magic bytes folder {folder_idx}! a: {folder_a.magic}, b: {folder_b.magic}"
+
+    assert (
+        folder_a.encryption == folder_b.encryption
+    ), f"Mismatch between encryption key at folder {folder_idx}! a: {folder_a.encryption}, b: {folder_b.encryption}"
+
+    for i, (a, b) in enumerate(zip(folder_a.file_list, folder_b.file_list)):
+        compare_file(a, b, folder_idx, i)
+
+
+def compare(path_a: str, path_b: str, config_path: str):
+    if os.path.isfile(path_a):
+        bigfile_a = from_dat(path_a, config_path)
+    else:
+        bigfile_a = from_unpacked(path_a)
+
+    if os.path.isfile(path_b):
+        bigfile_b = from_dat(path_b, config_path)
+    else:
+        bigfile_b = from_unpacked(path_b)
+
+    compare_unmapped_data(bigfile_a.unmapped_data, bigfile_b.unmapped_data)
+
+    assert len(bigfile_a.folder_list) == len(
+        bigfile_b.folder_list
+    ), f"Mismatch between number of folders! a: {len(bigfile_a.folder_list)}, b: {len(bigfile_b.folder_list)}"
+
+    assert (
+        bigfile_a.size == bigfile_b.size
+    ), f"Mismatch between file sizes! a: {bigfile_a.size} bytes, b: {bigfile_b.size} bytes"
+
+    for i, (a, b) in enumerate(zip(bigfile_a.folder_list, bigfile_b.folder_list)):
+        compare_folder(a, b, i)
+
+    print(f"No differences found between '{path_a}' and '{path_b}'")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("operation", choices={"unpack", "pack"})
-    parser.add_argument("input", help="Path to source")
-    parser.add_argument("output", help="Path to target")
+
     parser.add_argument(
         "--config",
         default="config.json",
         help="Path to JSON config. Defaults to 'config.json'",
     )
+
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    pack_parser = subparsers.add_parser("pack", help="Pack files")
+    pack_parser.add_argument("input", help="Input path")
+    pack_parser.add_argument("output", help="Output path")
+
+    unpack_parser = subparsers.add_parser("unpack", help="Unpack files")
+    unpack_parser.add_argument("input", help="Input path")
+    unpack_parser.add_argument("output", help="Output path")
+
+    compare_parser = subparsers.add_parser("compare", help="Compare files")
+    compare_parser.add_argument("input1", help="First input path")
+    compare_parser.add_argument("input2", help="Second input path")
+
     args = parser.parse_args()
 
     if not os.path.exists(args.config):
@@ -311,12 +414,22 @@ if __name__ == "__main__":
     with open(args.config) as f:
         CONFIG = json.load(f)
 
-    if not os.path.exists(args.input):
-        raise Exception(f"Input {args.input} could not be found")
-
-    if args.operation == "pack":
-        bigfile = from_unpacked(args.input, args.config)
-        pack_bigfile(bigfile, args.output)
-    else:
-        bigfile = from_dat(args.input, args.config)
-        unpack_bigfile(bigfile, args.output)
+    match args.command:
+        case "unpack":
+            assert os.path.exists(
+                args.input
+            ), f"Input file {args.input} does not exist!"
+            assert os.path.isfile(args.input), f"Input file {args.input} is not a file!"
+            unpack_bigfile(from_dat(args.input, args.config), args.output)
+        case "pack":
+            assert os.path.exists(
+                args.input
+            ), f"Input directory {args.input} does not exist!"
+            assert os.path.isdir(
+                args.input
+            ), f"Input directory {args.input} is not a directory!"
+            pack_bigfile(from_unpacked(args.input), args.output)
+        case "compare":
+            assert os.path.exists(args.input1), f"Input {args.input1} does not exist!"
+            assert os.path.exists(args.input2), f"Input {args.input2} does not exist!"
+            compare(args.input1, args.input2, args.config)
