@@ -80,11 +80,11 @@ The structure of the config file is as follows:
 }
 ```
 
-- `structure` - Required. The serialized structure of the file. This is automatically written when the file is unpacked.
+- `structure` - Required. The serialized structure of the file. This is automatically written when a file is unpacked for the first time.
 
 - `file_names` - Optional. A map of file hashes to their respective names. Used for naming files during unpacking, and reading files during repacking. Files without name mappings will be named `<file_hash>.bin`.
 
-- `unmapped_data` - Optional. Stores the byte offset and size of any non-padding data that is not considered a file. Required for a perfect match. Will be written to `UNMAPPED_DATA.bin` in the output directory.
+- `unmapped_data` - Optional. Stores the byte offset and size of any non-padding data that is not considered a file. Not needed to package the file but required for a perfect match. Will be written to `UNMAPPED_DATA.bin` in the output directory.
 
 ---
 

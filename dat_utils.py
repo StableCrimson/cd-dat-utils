@@ -386,12 +386,6 @@ def compare(path_a: str, path_b: str, config_path: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--config",
-        default="config.json",
-        help="Path to JSON config. Defaults to 'config.json'",
-    )
-
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     pack_parser = subparsers.add_parser("pack", help="Pack files")
@@ -405,6 +399,12 @@ if __name__ == "__main__":
     compare_parser = subparsers.add_parser("compare", help="Compare files")
     compare_parser.add_argument("input1", help="First input path")
     compare_parser.add_argument("input2", help="Second input path")
+
+    parser.add_argument(
+        "--config",
+        default="config.json",
+        help="Path to JSON config. Defaults to 'config.json'",
+    )
 
     args = parser.parse_args()
 
