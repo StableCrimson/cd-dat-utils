@@ -34,7 +34,13 @@ class BigFile(BaseModel):
 CONFIG = {}
 
 
+# TODO: If this isn't used in multiple CD titles, make a function table with the different hash methods so
+#       they can be specified in the config.
 def hash_from_file_path(file_path: str) -> int:
+    """
+    Generate a hash from a file path using the algorithm from Legacy of Kain: Soul Reaver.
+    """
+
     HASH_EXTENSIONS = ["drm", "crm", "tim", "smp", "snd", "smf", "snf"]
 
     sum = 0
@@ -96,13 +102,13 @@ def read_folder(file: BufferedReader, offset: int) -> FolderEntry:
 
     file.seek(folder_offset)
     num_files_record = int.from_bytes(file.read(2), "little")
-    assert (
-        file.read(2) == b"\x00\x00"
-    ), "Encrypted bytes found. Encryption not supported at this time."
+    assert file.read(2) == b"\x00\x00", (
+        "Encrypted bytes found. Encryption not supported at this time."
+    )
 
-    assert (
-        num_files == num_files_record
-    ), f"Mismatch between number of files in folder entry and folder record. Entry: {num_files} Record: {num_files_record}"
+    assert num_files == num_files_record, (
+        f"Mismatch between number of files in folder entry and folder record. Entry: {num_files} Record: {num_files_record}"
+    )
 
     for i in range(num_files):
         entry_offset = (i * FILE_ENTRY_SIZE) + folder_offset + 4
@@ -143,7 +149,7 @@ def from_dat(path: str, config_path: str) -> BigFile:
             )
 
         if CONFIG.get("structure") is None:
-            print(f"File structure not found in config. Writing...")
+            print("File structure not found in config. Writing...")
             CONFIG["structure"] = bigfile.model_dump()
             with open(config_path, "w") as f:
                 json.dump(CONFIG, f, indent=2)
@@ -222,10 +228,8 @@ def write_folder(folder: FolderEntry, header_offset: int, writer: BufferedWriter
 
 
 def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
-
     with open(output_path, "wb", 0) as f:
         with BufferedWriter(f, bigfile.size) as writer:
-
             writer.write(len(bigfile.folder_list).to_bytes(2, "little"))
             writer.write(b"\x00\x00")
 
@@ -291,7 +295,6 @@ def from_unpacked(input_dir: str) -> BigFile:
 
 
 def compare_unmapped_data(a: FileEntry | None, b: FileEntry | None):
-
     if a is None:
         assert b is None, "Unmapped data mismatch! a has no unmapped data, but b does"
         return
@@ -300,57 +303,55 @@ def compare_unmapped_data(a: FileEntry | None, b: FileEntry | None):
         assert a is None, "Unmapped data mismatch! a has unmapped data, but b doesn't"
         return
 
-    assert (
-        a.size == b.size
-    ), f"Size mismatch for unmapped data! a: {a.size} bytes, b: {b.size} bytes"
+    assert a.size == b.size, (
+        f"Size mismatch for unmapped data! a: {a.size} bytes, b: {b.size} bytes"
+    )
 
-    assert (
-        a.offset == b.offset
-    ), f"Offset mismatch for unmapped data! a: {a.offset}, b: {b.offset}"
+    assert a.offset == b.offset, (
+        f"Offset mismatch for unmapped data! a: {a.offset}, b: {b.offset}"
+    )
 
     assert a.contents == b.contents, "Content mismatch for unmapped data!"
 
 
 def compare_file(a: FileEntry, b: FileEntry, folder_idx: int, file_idx: int):
+    assert a.size == b.size, (
+        f"Mismatch between file sizes at folder {folder_idx} - file {file_idx}! a: {a.size} bytes, b: {b.size} bytes"
+    )
 
-    assert (
-        a.size == b.size
-    ), f"Mismatch between file sizes at folder {folder_idx} - file {file_idx}! a: {a.size} bytes, b: {b.size} bytes"
+    assert a.offset == b.offset, (
+        f"Mismatch between file offsets at folder {folder_idx} - file {file_idx}! a: {a.offset}, b: {b.offset}"
+    )
 
-    assert (
-        a.offset == b.offset
-    ), f"Mismatch between file offsets at folder {folder_idx} - file {file_idx}! a: {a.offset}, b: {b.offset}"
+    assert a.hash == b.hash, (
+        f"Mismatch between file hashes at folder {folder_idx} - file {file_idx}! a: {a.hash}, b: {b.hash}"
+    )
 
-    assert (
-        a.hash == b.hash
-    ), f"Mismatch between file hashes at folder {folder_idx} - file {file_idx}! a: {a.hash}, b: {b.hash}"
+    assert a.checksum == b.checksum, (
+        f"Mismatch between file checksums at folder {folder_idx} - file {file_idx}! a: {a.checksum}, b: {b.checksum}"
+    )
 
-    assert (
-        a.checksum == b.checksum
-    ), f"Mismatch between file checksums at folder {folder_idx} - file {file_idx}! a: {a.checksum}, b: {b.checksum}"
-
-    assert (
-        a.contents == b.contents
-    ), f"Mismatch between file contents at folder {folder_idx} - file {file_idx}!"
+    assert a.contents == b.contents, (
+        f"Mismatch between file contents at folder {folder_idx} - file {file_idx}!"
+    )
 
 
 def compare_folder(folder_a: FolderEntry, folder_b: FolderEntry, folder_idx: int):
+    assert len(folder_a.file_list) == len(folder_b.file_list), (
+        f"Mismatch between number of files at folder {folder_idx}! a: {len(folder_a.file_list)}, b: {len(folder_b.file_list)}"
+    )
 
-    assert len(folder_a.file_list) == len(
-        folder_b.file_list
-    ), f"Mismatch between number of files at folder {folder_idx}! a: {len(folder_a.file_list)}, b: {len(folder_b.file_list)}"
+    assert folder_a.offset == folder_b.offset, (
+        f"Mismatch between offsets at folder {folder_idx}! a: {folder_a.offset}, b: {folder_b.offset}"
+    )
 
-    assert (
-        folder_a.offset == folder_b.offset
-    ), f"Mismatch between offsets at folder {folder_idx}! a: {folder_a.offset}, b: {folder_b.offset}"
+    assert folder_a.magic == folder_b.magic, (
+        f"Mismatch between magic bytes folder {folder_idx}! a: {folder_a.magic}, b: {folder_b.magic}"
+    )
 
-    assert (
-        folder_a.magic == folder_b.magic
-    ), f"Mismatch between magic bytes folder {folder_idx}! a: {folder_a.magic}, b: {folder_b.magic}"
-
-    assert (
-        folder_a.encryption == folder_b.encryption
-    ), f"Mismatch between encryption key at folder {folder_idx}! a: {folder_a.encryption}, b: {folder_b.encryption}"
+    assert folder_a.encryption == folder_b.encryption, (
+        f"Mismatch between encryption key at folder {folder_idx}! a: {folder_a.encryption}, b: {folder_b.encryption}"
+    )
 
     for i, (a, b) in enumerate(zip(folder_a.file_list, folder_b.file_list)):
         compare_file(a, b, folder_idx, i)
@@ -369,13 +370,13 @@ def compare(path_a: str, path_b: str, config_path: str):
 
     compare_unmapped_data(bigfile_a.unmapped_data, bigfile_b.unmapped_data)
 
-    assert len(bigfile_a.folder_list) == len(
-        bigfile_b.folder_list
-    ), f"Mismatch between number of folders! a: {len(bigfile_a.folder_list)}, b: {len(bigfile_b.folder_list)}"
+    assert len(bigfile_a.folder_list) == len(bigfile_b.folder_list), (
+        f"Mismatch between number of folders! a: {len(bigfile_a.folder_list)}, b: {len(bigfile_b.folder_list)}"
+    )
 
-    assert (
-        bigfile_a.size == bigfile_b.size
-    ), f"Mismatch between file sizes! a: {bigfile_a.size} bytes, b: {bigfile_b.size} bytes"
+    assert bigfile_a.size == bigfile_b.size, (
+        f"Mismatch between file sizes! a: {bigfile_a.size} bytes, b: {bigfile_b.size} bytes"
+    )
 
     for i, (a, b) in enumerate(zip(bigfile_a.folder_list, bigfile_b.folder_list)):
         compare_folder(a, b, i)
@@ -416,18 +417,18 @@ if __name__ == "__main__":
 
     match args.command:
         case "unpack":
-            assert os.path.exists(
-                args.input
-            ), f"Input file {args.input} does not exist!"
+            assert os.path.exists(args.input), (
+                f"Input file {args.input} does not exist!"
+            )
             assert os.path.isfile(args.input), f"Input file {args.input} is not a file!"
             unpack_bigfile(from_dat(args.input, args.config), args.output)
         case "pack":
-            assert os.path.exists(
-                args.input
-            ), f"Input directory {args.input} does not exist!"
-            assert os.path.isdir(
-                args.input
-            ), f"Input directory {args.input} is not a directory!"
+            assert os.path.exists(args.input), (
+                f"Input directory {args.input} does not exist!"
+            )
+            assert os.path.isdir(args.input), (
+                f"Input directory {args.input} is not a directory!"
+            )
             pack_bigfile(from_unpacked(args.input), args.output)
         case "compare":
             assert os.path.exists(args.input1), f"Input {args.input1} does not exist!"

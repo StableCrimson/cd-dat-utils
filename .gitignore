@@ -1,6 +1,17 @@
+# Python
 .venv/
+__pycache__/
+
+# Testing
+.pytest_cache/
+
+# MacOS
+.DS_Store
+
+# Editor artifacts
+.vscode/
+
+# Project-specific
 *.DAT
 output/
-.DS_Store
 *.json
-__pycache__/
