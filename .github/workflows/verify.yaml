@@ -11,10 +11,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '>=3.9 <3.14'
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
       - name: Test with pytest
-        run: pytest --cov=src --cov-report=term-missing
+        run: pytest --cov=src --cov-report=term-missing --fail-under=90
