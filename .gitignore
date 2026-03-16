@@ -4,6 +4,7 @@ __pycache__/
 
 # Testing
 .pytest_cache/
+.coverage
 
 # MacOS
 .DS_Store

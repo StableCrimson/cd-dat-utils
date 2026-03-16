@@ -1,8 +1,9 @@
-from io import BufferedReader, BufferedWriter
+from io import BufferedWriter
 import os
 import json
 import shutil
 import argparse
+from typing import BinaryIO
 from pathlib import Path
 from pydantic import BaseModel, Field
 
@@ -71,7 +72,7 @@ def hash_from_file_path(file_path: str) -> int:
     return (length << 27) | (sum << 15) | (xor << 3) | ext_index
 
 
-def read_file(file: BufferedReader, offset: int) -> FileEntry:
+def read_file(file: BinaryIO, offset: int) -> FileEntry:
     file.seek(offset)
     hash = int.from_bytes(file.read(4), "little")
     size = int.from_bytes(file.read(4), "little")
@@ -88,7 +89,7 @@ def read_file(file: BufferedReader, offset: int) -> FileEntry:
     )
 
 
-def read_folder(file: BufferedReader, offset: int) -> FolderEntry:
+def read_folder(file: BinaryIO, offset: int) -> FolderEntry:
     file.seek(offset)
     magic = int.from_bytes(file.read(2), "little")
     num_files = int.from_bytes(file.read(2), "little")
@@ -207,7 +208,6 @@ def write_file(file: FileEntry, header_offset: int, writer: BufferedWriter):
         writer.write(file.checksum.to_bytes(4, "little"))
 
         writer.seek(file.offset)
-
         writer.write(file.contents)
 
 

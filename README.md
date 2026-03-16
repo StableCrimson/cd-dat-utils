@@ -80,7 +80,7 @@ The structure of the config file is as follows:
 }
 ```
 
-- `structure` - Required. The serialized structure of the file. This is automatically written when a file is unpacked for the first time.
+- `structure` - The serialized structure of the file. Required for packing. This will be automatically written to the config file when unpacking for the first time.
 
 - `file_names` - Optional. A map of file hashes to their respective names. Used for naming files during unpacking, and reading files during repacking. Files without name mappings will be named `<file_hash>.bin`.
 
@@ -93,7 +93,9 @@ BIGFILE spec from [PlayStation Specification psx-spx](https://psx-spx.consoledev
 ## Planned Features
 
 - [ ] Encryption support
+- [ ] Deduplication flag
 - [ ] Compression + decompression
 - [ ] Multiple unmapped data segments
 - [ ] Overlay utils (undo and redo mem relocation)
 - [ ] Test suite
+- [ ] Config as YAML file
