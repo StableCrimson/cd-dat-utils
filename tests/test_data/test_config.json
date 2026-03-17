@@ -1,0 +1,48 @@
+{
+  "file_names": {
+    "2037158304": "dir_1\\test_file1.drm",
+    "2037191072": "dir_1\\test_file2.drm",
+    "2579342152": "dir_2\\test_file3.bin"
+  },
+  "unmapped_data": {
+    "size": 100,
+    "offset": 12288
+  },
+  "structure": {
+    "size": 10284,
+    "folder_list": [
+      {
+        "offset": 2048,
+        "magic": 1122,
+        "encryption": 0,
+        "file_list": [
+          {
+            "size": 35,
+            "offset": 4096,
+            "hash": 2037158304,
+            "checksum": 287454020
+          },
+          {
+            "size": 23,
+            "offset": 6144,
+            "hash": 2037191072,
+            "checksum": 0
+          }
+        ]
+      },
+      {
+        "offset": 8192,
+        "magic": 5566,
+        "encryption": 0,
+        "file_list": [
+          {
+            "size": 45,
+            "offset": 10240,
+            "hash": 2579342152,
+            "checksum": 287454020
+          }
+        ]
+      }
+    ]
+  }
+}
