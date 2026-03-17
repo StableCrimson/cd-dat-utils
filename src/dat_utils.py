@@ -127,7 +127,7 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
         )
 
         num_folders = int.from_bytes(file.read(2), "little")
-        assert file.read(2) == b"\x00\x00"
+        file.read(2)
 
         for i in range(num_folders):
             offset = (i * FOLDER_ENTRY_SIZE) + 4
@@ -291,70 +291,89 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
     return bigfile
 
 
-def compare_unmapped_data(a: FileEntry | None, b: FileEntry | None):
-    if a is None:
-        assert b is None, "Unmapped data mismatch! a has no unmapped data, but b does"
+def compare_unmapped_data(a: FileEntry | None, b: FileEntry | None, errors: list[str]):
+    if a is None and b is not None:
+        errors.append("Unmapped data mismatch! a has no unmapped data, but b does")
         return
 
-    if b is None:
-        assert a is None, "Unmapped data mismatch! a has unmapped data, but b doesn't"
+    if a is not None and b is None:
+        errors.append("Unmapped data mismatch! a has unmapped data, but b doesn't")
         return
 
-    assert a.size == b.size, (
-        f"Size mismatch for unmapped data! a: {a.size} bytes, b: {b.size} bytes"
-    )
+    if a is not None and b is not None:
+        if a.size != b.size:
+            errors.append(
+                f"Size mismatch for unmapped data! a: {a.size} bytes, b: {b.size} bytes"
+            )
 
-    assert a.offset == b.offset, (
-        f"Offset mismatch for unmapped data! a: {a.offset}, b: {b.offset}"
-    )
+        if a.offset != b.offset:
+            errors.append(
+                f"Offset mismatch for unmapped data! a: {a.offset}, b: {b.offset}"
+            )
 
-    assert a.contents == b.contents, "Content mismatch for unmapped data!"
-
-
-def compare_file(a: FileEntry, b: FileEntry, folder_idx: int, file_idx: int):
-    assert a.size == b.size, (
-        f"Mismatch between file sizes at folder {folder_idx} - file {file_idx}! a: {a.size} bytes, b: {b.size} bytes"
-    )
-
-    assert a.offset == b.offset, (
-        f"Mismatch between file offsets at folder {folder_idx} - file {file_idx}! a: {a.offset}, b: {b.offset}"
-    )
-
-    assert a.hash == b.hash, (
-        f"Mismatch between file hashes at folder {folder_idx} - file {file_idx}! a: {a.hash}, b: {b.hash}"
-    )
-
-    assert a.checksum == b.checksum, (
-        f"Mismatch between file checksums at folder {folder_idx} - file {file_idx}! a: {a.checksum}, b: {b.checksum}"
-    )
-
-    assert a.contents == b.contents, (
-        f"Mismatch between file contents at folder {folder_idx} - file {file_idx}!"
-    )
+        if a.contents != b.contents:
+            errors.append("Content mismatch for unmapped data!")
 
 
-def compare_folder(folder_a: FolderEntry, folder_b: FolderEntry, folder_idx: int):
-    assert len(folder_a.file_list) == len(folder_b.file_list), (
-        f"Mismatch between number of files at folder {folder_idx}! a: {len(folder_a.file_list)}, b: {len(folder_b.file_list)}"
-    )
+def compare_file(
+    a: FileEntry, b: FileEntry, folder_idx: int, file_idx: int, errors: list[str]
+):
+    if a.size != b.size:
+        errors.append(
+            f"Mismatch between file sizes at folder {folder_idx} - file {file_idx}! a: {a.size} bytes, b: {b.size} bytes"
+        )
 
-    assert folder_a.offset == folder_b.offset, (
-        f"Mismatch between offsets at folder {folder_idx}! a: {folder_a.offset}, b: {folder_b.offset}"
-    )
+    if a.offset != b.offset:
+        errors.append(
+            f"Mismatch between file offsets at folder {folder_idx} - file {file_idx}! a: {a.offset}, b: {b.offset}"
+        )
 
-    assert folder_a.magic == folder_b.magic, (
-        f"Mismatch between magic bytes folder {folder_idx}! a: {folder_a.magic}, b: {folder_b.magic}"
-    )
+    if a.hash != b.hash:
+        errors.append(
+            f"Mismatch between file hashes at folder {folder_idx} - file {file_idx}! a: {a.hash}, b: {b.hash}"
+        )
 
-    assert folder_a.encryption == folder_b.encryption, (
-        f"Mismatch between encryption key at folder {folder_idx}! a: {folder_a.encryption}, b: {folder_b.encryption}"
-    )
+    if a.checksum != b.checksum:
+        errors.append(
+            f"Mismatch between file checksums at folder {folder_idx} - file {file_idx}! a: {a.checksum}, b: {b.checksum}"
+        )
+
+    if a.contents != b.contents:
+        errors.append(
+            f"Mismatch between file contents at folder {folder_idx} - file {file_idx}!"
+        )
+
+
+def compare_folder(
+    folder_a: FolderEntry, folder_b: FolderEntry, folder_idx: int, errors: list[str]
+):
+    if len(folder_a.file_list) != len(folder_b.file_list):
+        errors.append(
+            f"Mismatch between number of files at folder {folder_idx}! a: {len(folder_a.file_list)}, b: {len(folder_b.file_list)}"
+        )
+
+    if folder_a.offset != folder_b.offset:
+        errors.append(
+            f"Mismatch between offsets at folder {folder_idx}! a: {folder_a.offset}, b: {folder_b.offset}"
+        )
+
+    if folder_a.magic != folder_b.magic:
+        errors.append(
+            f"Mismatch between magic bytes folder {folder_idx}! a: {folder_a.magic}, b: {folder_b.magic}"
+        )
+
+    if folder_a.encryption != folder_b.encryption:
+        errors.append(
+            f"Mismatch between encryption key at folder {folder_idx}! a: {folder_a.encryption}, b: {folder_b.encryption}"
+        )
 
     for i, (a, b) in enumerate(zip(folder_a.file_list, folder_b.file_list)):
-        compare_file(a, b, folder_idx, i)
+        compare_file(a, b, folder_idx, i, errors)
 
 
-def compare(path_a: str, path_b: str, config: dict, config_path: str):
+def compare(path_a: str, path_b: str, config: dict, config_path: str) -> list[str]:
+    errors = []
+
     if os.path.isfile(path_a):
         bigfile_a = from_dat(path_a, config, config_path)
     else:
@@ -365,20 +384,22 @@ def compare(path_a: str, path_b: str, config: dict, config_path: str):
     else:
         bigfile_b = from_unpacked(path_b, config)
 
-    compare_unmapped_data(bigfile_a.unmapped_data, bigfile_b.unmapped_data)
+    if len(bigfile_a.folder_list) != len(bigfile_b.folder_list):
+        errors.append(
+            f"Mismatch between number of folders! a: {len(bigfile_a.folder_list)}, b: {len(bigfile_b.folder_list)}"
+        )
 
-    assert len(bigfile_a.folder_list) == len(bigfile_b.folder_list), (
-        f"Mismatch between number of folders! a: {len(bigfile_a.folder_list)}, b: {len(bigfile_b.folder_list)}"
-    )
+    if bigfile_a.size != bigfile_b.size:
+        errors.append(
+            f"Mismatch between file sizes! a: {bigfile_a.size} bytes, b: {bigfile_b.size} bytes"
+        )
 
-    assert bigfile_a.size == bigfile_b.size, (
-        f"Mismatch between file sizes! a: {bigfile_a.size} bytes, b: {bigfile_b.size} bytes"
-    )
+    compare_unmapped_data(bigfile_a.unmapped_data, bigfile_b.unmapped_data, errors)
 
     for i, (a, b) in enumerate(zip(bigfile_a.folder_list, bigfile_b.folder_list)):
-        compare_folder(a, b, i)
+        compare_folder(a, b, i, errors)
 
-    print(f"No differences found between '{path_a}' and '{path_b}'")
+    return errors
 
 
 if __name__ == "__main__":
@@ -432,4 +453,13 @@ if __name__ == "__main__":
         case "compare":
             assert os.path.exists(args.input1), f"Input {args.input1} does not exist!"
             assert os.path.exists(args.input2), f"Input {args.input2} does not exist!"
-            compare(args.input1, args.input2, config, args.config)
+            errors = compare(args.input1, args.input2, config, args.config)
+
+            if len(errors) > 0:
+                print(f"Differences found between '{args.input1}' and '{args.input2}:")
+                for error in errors:
+                    print(f"\t{error}")
+            else:
+                print(
+                    f"No differences found between '{args.input1}' and '{args.input2}'"
+                )
