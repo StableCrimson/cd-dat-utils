@@ -32,9 +32,6 @@ class BigFile(BaseModel):
     unmapped_data: FileEntry | None = Field(exclude=True, default=None)
 
 
-CONFIG = {}
-
-
 # TODO: If this isn't used in multiple CD titles, make a function table with the different hash methods so
 #       they can be specified in the config.
 def hash_from_file_path(file_path: str) -> int:
@@ -118,7 +115,7 @@ def read_folder(file: BinaryIO, offset: int) -> FolderEntry:
     return folder
 
 
-def from_dat(path: str, config_path: str) -> BigFile:
+def from_dat(path: str, config: dict, config_path: str) -> BigFile:
     with open(path, "rb") as file:
         file.seek(0, os.SEEK_END)
         size = file.tell()
@@ -136,7 +133,7 @@ def from_dat(path: str, config_path: str) -> BigFile:
             offset = (i * FOLDER_ENTRY_SIZE) + 4
             bigfile.folder_list.append(read_folder(file, offset))
 
-        unmapped_data = CONFIG.get("unmapped_data")
+        unmapped_data = config.get("unmapped_data")
 
         if unmapped_data is not None:
             file.seek(unmapped_data["offset"])
@@ -149,16 +146,16 @@ def from_dat(path: str, config_path: str) -> BigFile:
                 contents=file.read(unmapped_data["size"]),
             )
 
-        if CONFIG.get("structure") is None:
+        if config.get("structure") is None:
             print("File structure not found in config. Writing...")
-            CONFIG["structure"] = bigfile.model_dump()
+            config["structure"] = bigfile.model_dump()
             with open(config_path, "w") as f:
-                json.dump(CONFIG, f, indent=2)
+                json.dump(config, f, indent=2)
 
         return bigfile
 
 
-def unpack_bigfile(bigfile: BigFile, output_dir: str) -> None:
+def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str) -> None:
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
 
@@ -172,7 +169,7 @@ def unpack_bigfile(bigfile: BigFile, output_dir: str) -> None:
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
-            file_name = CONFIG.get("file_names", {}).get(
+            file_name = config.get("file_names", {}).get(
                 str(file.hash), f"{file.hash}.bin"
             )
 
@@ -242,17 +239,17 @@ def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
                 writer.write(bigfile.unmapped_data.contents)
 
 
-def from_unpacked(input_dir: str) -> BigFile:
+def from_unpacked(input_dir: str, config: dict) -> BigFile:
     if not os.path.exists(input_dir):
         raise Exception(f"Input directory {input_dir} does not exist")
 
-    if CONFIG.get("structure") is None:
+    if config.get("structure") is None:
         raise Exception("'structure' does not exist in config file!")
 
-    bigfile = BigFile.model_validate_json(json.dumps(CONFIG["structure"]))
+    bigfile = BigFile.model_validate_json(json.dumps(config["structure"]))
 
     already_read_files = {}
-    file_names = CONFIG.get("file_names", {})
+    file_names = config.get("file_names", {})
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
@@ -279,7 +276,7 @@ def from_unpacked(input_dir: str) -> BigFile:
             with open(full_file_path, "rb") as f:
                 file.contents = f.read()
 
-    unmapped_data = CONFIG.get("unmapped_data")
+    unmapped_data = config.get("unmapped_data")
 
     if unmapped_data is not None:
         with open(os.path.join(input_dir, "UNMAPPED_DATA.bin"), "rb") as f:
@@ -357,16 +354,16 @@ def compare_folder(folder_a: FolderEntry, folder_b: FolderEntry, folder_idx: int
         compare_file(a, b, folder_idx, i)
 
 
-def compare(path_a: str, path_b: str, config_path: str):
+def compare(path_a: str, path_b: str, config: dict, config_path: str):
     if os.path.isfile(path_a):
-        bigfile_a = from_dat(path_a, config_path)
+        bigfile_a = from_dat(path_a, config, config_path)
     else:
-        bigfile_a = from_unpacked(path_a)
+        bigfile_a = from_unpacked(path_a, config)
 
     if os.path.isfile(path_b):
-        bigfile_b = from_dat(path_b, config_path)
+        bigfile_b = from_dat(path_b, config, config_path)
     else:
-        bigfile_b = from_unpacked(path_b)
+        bigfile_b = from_unpacked(path_b, config)
 
     compare_unmapped_data(bigfile_a.unmapped_data, bigfile_b.unmapped_data)
 
@@ -410,10 +407,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not os.path.exists(args.config):
-        raise Exception(f"Config file {args.config} could not be found")
+        raise Exception(f"config file {args.config} could not be found")
 
     with open(args.config) as f:
-        CONFIG = json.load(f)
+        config = json.load(f)
 
     match args.command:
         case "unpack":
@@ -421,7 +418,9 @@ if __name__ == "__main__":
                 f"Input file {args.input} does not exist!"
             )
             assert os.path.isfile(args.input), f"Input file {args.input} is not a file!"
-            unpack_bigfile(from_dat(args.input, args.config), args.output)
+            unpack_bigfile(
+                from_dat(args.input, config, args.config), config, args.output
+            )
         case "pack":
             assert os.path.exists(args.input), (
                 f"Input directory {args.input} does not exist!"
@@ -429,8 +428,8 @@ if __name__ == "__main__":
             assert os.path.isdir(args.input), (
                 f"Input directory {args.input} is not a directory!"
             )
-            pack_bigfile(from_unpacked(args.input), args.output)
+            pack_bigfile(from_unpacked(args.input, config), args.output)
         case "compare":
             assert os.path.exists(args.input1), f"Input {args.input1} does not exist!"
             assert os.path.exists(args.input2), f"Input {args.input2} does not exist!"
-            compare(args.input1, args.input2, args.config)
+            compare(args.input1, args.input2, config, args.config)
