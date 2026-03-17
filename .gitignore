@@ -16,3 +16,6 @@ __pycache__/
 *.DAT
 output/
 *.json
+
+# Only include sample data and config for testing
+!tests/test_data/*
