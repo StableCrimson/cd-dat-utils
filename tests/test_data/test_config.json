@@ -9,7 +9,7 @@
     "offset": 12288
   },
   "structure": {
-    "size": 10284,
+    "size": 12388,
     "folder_list": [
       {
         "offset": 2048,
@@ -23,7 +23,7 @@
             "checksum": 287454020
           },
           {
-            "size": 23,
+            "size": 36,
             "offset": 6144,
             "hash": 2037191072,
             "checksum": 0
@@ -36,7 +36,7 @@
         "encryption": 0,
         "file_list": [
           {
-            "size": 45,
+            "size": 44,
             "offset": 10240,
             "hash": 2579342152,
             "checksum": 287454020

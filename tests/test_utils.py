@@ -7,9 +7,18 @@ from src.dat_utils import (
     from_dat,
     from_unpacked,
     hash_from_file_path,
+    compare_file,
+    compare_folder,
+    compare,
+    FileEntry,
+    FolderEntry,
+    BigFile,
 )
 
+DAT_PATH = "tests/test_data/hello_dat.DAT"
+UNPACKED_PATH = "tests/test_data/unpacked"
 CONFIG_PATH = "tests/test_data/test_config.json"
+
 with open(CONFIG_PATH) as f:
     CONFIG = json.load(f)
 
@@ -49,7 +58,7 @@ def test_read_folder(mock_read_folder: Mock):
 
 
 def test_from_dat():
-    bigfile = from_dat("tests/test_data/hello_dat.dat", CONFIG, CONFIG_PATH)
+    bigfile = from_dat(DAT_PATH, CONFIG, CONFIG_PATH)
 
     assert len(bigfile.folder_list) == 2
     assert bigfile.unmapped_data is not None
@@ -58,15 +67,23 @@ def test_from_dat():
 
 
 def test_from_unpacked():
-    bigfile = from_unpacked(
-        "tests/test_data/unpacked",
-        CONFIG,
-    )
+    bigfile = from_unpacked(UNPACKED_PATH, CONFIG)
 
     assert len(bigfile.folder_list) == 2
     assert bigfile.unmapped_data is not None
     assert bigfile.unmapped_data.size == 100
     assert bigfile.unmapped_data.contents == b"\x44" * 100
+
+
+@patch("builtins.open")
+def test_structure_written_if_not_present(mock_open: Mock):
+    expected_path = "some_path.json"
+    config = {}
+
+    _ = from_dat(DAT_PATH, config, expected_path)
+
+    assert config.get("structure") is not None
+    mock_open.assert_called_with(expected_path, "w")
 
 
 def test_write_file():
@@ -85,17 +102,58 @@ def test_unpack_bigfile():
     assert False, "Not implemented yet"
 
 
-def test_structure_written_if_not_exists():
+def test_compare_unmapped_data():
     assert False, "Not implemented yet"
 
 
 def test_compare_file():
-    assert False, "Not implemented yet"
+    a = FileEntry(size=1, offset=0, hash=0, checksum=0, contents=(b"\x11" * 3))
+    b = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=(b"\x11" * 4))
+    errors = []
+
+    compare_file(a, b, 0, 0, errors)
+
+    assert len(errors) == 4
+    assert "offset" in errors[0]
+    assert "hash" in errors[1]
+    assert "checksum" in errors[2]
+    assert "contents" in errors[3]
 
 
-def test_compare_folder():
-    assert False, "Not implemented yet"
+@patch("src.dat_utils.compare_file")
+def test_compare_folder(mock_compare_file: Mock):
+    a = FolderEntry(offset=0, magic=0, encryption=0, file_list=[Mock(FileEntry)] * 3)
+    b = FolderEntry(offset=1, magic=1, encryption=1, file_list=[Mock(FileEntry)] * 4)
+    errors = []
+
+    compare_folder(a, b, 0, errors)
+
+    assert len(errors) == 4
+    assert "files" in errors[0]
+    assert "offset" in errors[1]
+    assert "magic" in errors[2]
+    assert "encryption" in errors[3]
+    assert mock_compare_file.call_count == 3
 
 
-def test_compare_bigfile():
-    assert False, "Not implemented yet"
+@patch("src.dat_utils.compare_folder")
+@patch("src.dat_utils.compare_unmapped_data")
+def test_compare_bigfile(mock_compare_unmapped: Mock, mock_compare_folder: Mock):
+    a = BigFile(size=0, folder_list=[Mock(FolderEntry)] * 2)
+    b = BigFile(size=1, folder_list=[Mock(FolderEntry)] * 3)
+
+    errors = compare(a, b)
+
+    assert len(errors) == 2
+    assert "folders" in errors[0]
+    assert "size" in errors[1]
+    assert mock_compare_folder.call_count == 2
+    mock_compare_unmapped.assert_called()
+
+
+def test_compare_e2e():
+    a = from_dat(DAT_PATH, CONFIG, CONFIG_PATH)
+    b = from_unpacked(UNPACKED_PATH, CONFIG)
+    errors = compare(a, b)
+
+    assert len(errors) == 0

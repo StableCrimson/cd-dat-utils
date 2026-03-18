@@ -6,6 +6,9 @@ __pycache__/
 .pytest_cache/
 .coverage
 
+# Only include sample data and config for testing
+!tests/test_data/*
+
 # MacOS
 .DS_Store
 
@@ -16,6 +19,3 @@ __pycache__/
 *.DAT
 output/
 *.json
-
-# Only include sample data and config for testing
-!tests/test_data/*
