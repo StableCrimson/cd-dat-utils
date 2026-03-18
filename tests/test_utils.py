@@ -1,12 +1,21 @@
 from io import BufferedReader, BytesIO
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
+from copy import deepcopy
+import pytest
+from tempfile import NamedTemporaryFile
 import json
 from src.dat_utils import (
     read_file,
     read_folder,
+    write_file,
+    write_folder,
+    write_unmapped_data,
     from_dat,
     from_unpacked,
+    unpack_bigfile,
+    pack_bigfile,
     hash_from_file_path,
+    compare_unmapped_data,
     compare_file,
     compare_folder,
     compare,
@@ -75,8 +84,38 @@ def test_from_unpacked():
     assert bigfile.unmapped_data.contents == b"\x44" * 100
 
 
+@patch("os.path.exists")
 @patch("builtins.open")
-def test_structure_written_if_not_present(mock_open: Mock):
+def test_from_unpacked_raises_input_dir_not_found(_: Mock, mock_exists: Mock):
+    mock_exists.return_value = False
+
+    with pytest.raises(Exception, match=r"Input directory .* does not exist"):
+        from_unpacked("some_file", CONFIG)
+
+
+@patch("os.path.exists")
+@patch("builtins.open")
+def test_from_unpacked_raises_subfile_not_found(_: Mock, mock_exists: Mock):
+    mock_exists.side_effect = [True, False]
+
+    with pytest.raises(Exception, match=r"File .* cannot be found!"):
+        from_unpacked("some_file", CONFIG)
+
+
+@patch("os.path.exists")
+@patch("builtins.open")
+def test_from_unpacked_raises_no_structure(_: Mock, mock_exists: Mock):
+    mock_exists.return_value = True
+
+    config = deepcopy(CONFIG)
+    del config["structure"]
+
+    with pytest.raises(Exception, match="'structure' does not exist in config file!"):
+        from_unpacked("some_file", config)
+
+
+@patch("builtins.open")
+def test_from_unpacked_writes_structure_if_not_present(mock_open: Mock):
     expected_path = "some_path.json"
     config = {}
 
@@ -87,37 +126,260 @@ def test_structure_written_if_not_present(mock_open: Mock):
 
 
 def test_write_file():
-    assert False, "Not implemented yet"
+    temp_file = NamedTemporaryFile("wb")
+
+    expected = (
+        b"\x44\x33\x22\x11\x0c\x00\x00\x00\x10\x00\x00\x00\x88\x77\x66\x55"
+        + "hello world!".encode("ascii")
+    )
+
+    file = FileEntry(
+        size=12,
+        offset=16,
+        hash=0x11223344,
+        checksum=0x55667788,
+        contents="hello world!".encode("ascii"),
+    )
+
+    with open(temp_file.name, "wb") as f:
+        write_file(file, 0, f)
+
+    with open(temp_file.name, "rb") as f:
+        assert f.read() == expected
 
 
-def test_write_folder():
-    assert False, "Not implemented yet"
+@patch("src.dat_utils.write_file")
+def test_write_folder(mock_write_file: Mock):
+    temp_folder = NamedTemporaryFile("wb")
+
+    expected = b"\x22\x11\x01\x00\x08\x00\x00\x00\x01\x00\x00\x00"
+
+    folder = FolderEntry(
+        offset=8,
+        magic=0x1122,
+        encryption=0,
+        file_list=[Mock(FileEntry)],
+    )
+
+    with open(temp_folder.name, "wb") as f:
+        write_folder(folder, 0, f)
+
+    with open(temp_folder.name, "rb") as f:
+        assert f.read() == expected
+
+    assert mock_write_file.call_count == 1
 
 
-def test_pack_bigfile():
-    assert False, "Not implemented yet"
+def test_write_unmapped_data():
+    unmapped = FileEntry(
+        size=0,
+        offset=0,
+        hash=0,
+        checksum=0,
+        contents="this is unmapped data".encode("ascii"),
+    )
+
+    file = NamedTemporaryFile("wb")
+
+    with open(file.name, "wb") as f:
+        write_unmapped_data(unmapped, f)
+
+    with open(file.name, "rb") as f:
+        assert f.read() == "this is unmapped data".encode("ascii")
 
 
-def test_unpack_bigfile():
-    assert False, "Not implemented yet"
+@patch("src.dat_utils.write_unmapped_data")
+@patch("src.dat_utils.write_folder")
+@patch("builtins.open")
+def test_pack_bigfile(mock_open: Mock, mock_write_folder: Mock, _):
+    file = BigFile(size=1, folder_list=[Mock(FolderEntry)] * 2)
+    written_file = NamedTemporaryFile("wb")
+    mock_open.return_value = written_file
+
+    pack_bigfile(file, "fake_dir")
+
+    assert mock_write_folder.call_count == len(file.folder_list)
+    mock_open.assert_called_once_with("fake_dir", "wb", 0)
+
+
+@patch("src.dat_utils.write_unmapped_data")
+@patch("src.dat_utils.write_folder")
+@patch("builtins.open")
+def test_pack_bigfile_writes_unmapped_data(
+    mock_open: Mock, mock_write_folder: Mock, mock_write_unmapped: Mock
+):
+    file = BigFile(size=1, folder_list=[], unmapped_data=Mock(FileEntry))
+
+    mock_open.return_value = NamedTemporaryFile("wb")
+
+    pack_bigfile(file, "fake_dir")
+
+    assert mock_write_folder.call_count == len(file.folder_list)
+    mock_open.assert_called_once_with("fake_dir", "wb", 0)
+    mock_write_unmapped.assert_called_once()
+
+
+@patch("os.makedirs")
+@patch("shutil.rmtree")
+@patch("builtins.open")
+@patch("os.path.exists")
+def test_unpack_bigfile_writes_unmapped_data(mock_exists: Mock, mock_open: Mock, *_):
+    unmapped_data = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=b"\x01")
+
+    file = BigFile(size=1, folder_list=[], unmapped_data=unmapped_data)
+    mock_exists.return_value = False
+
+    unpack_bigfile(file, CONFIG, "fake_dir")
+
+    mock_open.assert_has_calls([call("fake_dir/UNMAPPED_DATA.bin", "wb")], True)
+
+
+@patch("os.makedirs")
+@patch("shutil.rmtree")
+@patch("builtins.open")
+@patch("os.path.exists")
+def test_unpack_bigfile_unknown_hashes(mock_exists: Mock, mock_open: Mock, *_):
+    file_0 = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=b"\x01")
+    file_1 = FileEntry(size=1, offset=1, hash=2, checksum=1, contents=b"\x01")
+
+    folder = FolderEntry(offset=0, magic=1, encryption=0, file_list=[file_0, file_1])
+
+    file = BigFile(size=1, folder_list=[folder])
+    mock_exists.return_value = False
+
+    unpack_bigfile(file, CONFIG, "fake_dir")
+
+    mock_open.assert_has_calls(
+        [call("fake_dir/1.bin", "wb"), call("fake_dir/2.bin", "wb")], True
+    )
+
+
+@patch("os.makedirs")
+@patch("shutil.rmtree")
+@patch("builtins.open")
+@patch("os.path.exists")
+def test_unpack_bigfile_known_hashes(mock_exists: Mock, mock_open: Mock, *_):
+    file_0 = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=b"\x01")
+    file_1 = FileEntry(size=1, offset=1, hash=2, checksum=1, contents=b"\x01")
+
+    folder = FolderEntry(offset=0, magic=1, encryption=0, file_list=[file_0, file_1])
+
+    file = BigFile(size=1, folder_list=[folder])
+    mock_exists.return_value = False
+
+    config = deepcopy(CONFIG)
+    config["file_names"]["1"] = "file_1.drm"
+    config["file_names"]["2"] = "file_2.chr"
+
+    unpack_bigfile(file, config, "fake_dir")
+
+    mock_open.assert_has_calls(
+        [call("fake_dir/file_1.drm", "wb"), call("fake_dir/file_2.chr", "wb")], True
+    )
+
+
+@patch("os.makedirs")
+@patch("shutil.rmtree")
+@patch("builtins.open")
+@patch("os.path.exists")
+def test_unpack_bigfile_names_duplicates(mock_exists: Mock, mock_open: Mock, *_):
+    file_0 = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=b"\x01")
+
+    folder = FolderEntry(offset=0, magic=1, encryption=0, file_list=[file_0, file_0])
+
+    file = BigFile(size=1, folder_list=[folder])
+    mock_exists.return_value = False
+
+    unpack_bigfile(file, CONFIG, "fake_dir")
+
+    mock_open.assert_has_calls(
+        [call("fake_dir/1.bin", "wb"), call("fake_dir/1_duplicate1.bin", "wb")], True
+    )
+
+
+@patch("os.makedirs")
+@patch("shutil.rmtree")
+@patch("builtins.open")
+@patch("pathlib.Path.mkdir")
+@patch("os.path.exists")
+def test_unpack_bigfile_creates_subdirs(
+    mock_exists: Mock, mock_mkdir: Mock, mock_open: Mock, *_
+):
+    file_0 = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=b"\x01")
+    file_1 = FileEntry(size=1, offset=1, hash=2, checksum=1, contents=b"\x01")
+
+    folder = FolderEntry(offset=0, magic=1, encryption=0, file_list=[file_0, file_1])
+
+    file = BigFile(size=1, folder_list=[folder])
+    mock_exists.side_effect = [False, False, True]
+
+    config = deepcopy(CONFIG)
+    config["file_names"]["1"] = "my_dir\\file_1.drm"
+    config["file_names"]["2"] = "my_dir\\file_2.chr"
+
+    unpack_bigfile(file, config, "fake_dir")
+
+    mock_mkdir.assert_called_once()
+    mock_open.assert_has_calls(
+        [
+            call("fake_dir/my_dir/file_1.drm", "wb"),
+            call("fake_dir/my_dir/file_2.chr", "wb"),
+        ],
+        True,
+    )
+
+
+@patch("builtins.open")
+@patch("os.makedirs")
+@patch("os.path.exists")
+@patch("shutil.rmtree")
+def test_unpack_bigfile_deletes_existing_dir(mock_rmtree: Mock, mock_exists: Mock, *_):
+    file = BigFile(size=1, folder_list=[])
+    mock_exists.return_value = True
+
+    unpack_bigfile(file, CONFIG, "fake_dir")
+
+    mock_rmtree.assert_called_once_with("fake_dir")
 
 
 def test_compare_unmapped_data():
-    assert False, "Not implemented yet"
+    a = FileEntry(size=0, offset=0, hash=0, checksum=0, contents=(b"\x11" * 3))
+    b = FileEntry(size=1, offset=1, hash=0, checksum=0, contents=(b"\x11" * 4))
+    errors = []
+
+    compare_unmapped_data(a, b, errors)
+
+    assert len(errors) == 3
+    assert "Size" in errors[0]
+    assert "Offset" in errors[1]
+    assert "Content" in errors[2]
+
+    errors = []
+    compare_unmapped_data(a, None, errors)
+
+    assert len(errors) == 1
+    assert "has unmapped data" in errors[0]
+
+    errors = []
+    compare_unmapped_data(None, b, errors)
+
+    assert len(errors) == 1
+    assert "has no unmapped data" in errors[0]
 
 
 def test_compare_file():
-    a = FileEntry(size=1, offset=0, hash=0, checksum=0, contents=(b"\x11" * 3))
+    a = FileEntry(size=0, offset=0, hash=0, checksum=0, contents=(b"\x11" * 3))
     b = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=(b"\x11" * 4))
     errors = []
 
     compare_file(a, b, 0, 0, errors)
 
-    assert len(errors) == 4
-    assert "offset" in errors[0]
-    assert "hash" in errors[1]
-    assert "checksum" in errors[2]
-    assert "contents" in errors[3]
+    assert len(errors) == 5
+    assert "size" in errors[0]
+    assert "offset" in errors[1]
+    assert "hash" in errors[2]
+    assert "checksum" in errors[3]
+    assert "contents" in errors[4]
 
 
 @patch("src.dat_utils.compare_file")
