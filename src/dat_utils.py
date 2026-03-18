@@ -344,60 +344,48 @@ def compare_file(
         )
 
 
-def compare_folder(
-    folder_a: FolderEntry, folder_b: FolderEntry, folder_idx: int, errors: list[str]
-):
-    if len(folder_a.file_list) != len(folder_b.file_list):
+def compare_folder(a: FolderEntry, b: FolderEntry, folder_idx: int, errors: list[str]):
+    if len(a.file_list) != len(b.file_list):
         errors.append(
-            f"Mismatch between number of files at folder {folder_idx}! a: {len(folder_a.file_list)}, b: {len(folder_b.file_list)}"
+            f"Mismatch between number of files at folder {folder_idx}! a: {len(a.file_list)}, b: {len(b.file_list)}"
         )
 
-    if folder_a.offset != folder_b.offset:
+    if a.offset != b.offset:
         errors.append(
-            f"Mismatch between offsets at folder {folder_idx}! a: {folder_a.offset}, b: {folder_b.offset}"
+            f"Mismatch between offsets at folder {folder_idx}! a: {a.offset}, b: {b.offset}"
         )
 
-    if folder_a.magic != folder_b.magic:
+    if a.magic != b.magic:
         errors.append(
-            f"Mismatch between magic bytes folder {folder_idx}! a: {folder_a.magic}, b: {folder_b.magic}"
+            f"Mismatch between magic bytes folder {folder_idx}! a: {a.magic}, b: {b.magic}"
         )
 
-    if folder_a.encryption != folder_b.encryption:
+    if a.encryption != b.encryption:
         errors.append(
-            f"Mismatch between encryption key at folder {folder_idx}! a: {folder_a.encryption}, b: {folder_b.encryption}"
+            f"Mismatch between encryption key at folder {folder_idx}! a: {a.encryption}, b: {b.encryption}"
         )
 
-    for i, (a, b) in enumerate(zip(folder_a.file_list, folder_b.file_list)):
-        compare_file(a, b, folder_idx, i, errors)
+    for i, (file_a, file_b) in enumerate(zip(a.file_list, b.file_list)):
+        compare_file(file_a, file_b, folder_idx, i, errors)
 
 
-def compare(path_a: str, path_b: str, config: dict, config_path: str) -> list[str]:
+def compare(a: BigFile, b: BigFile) -> list[str]:
     errors = []
 
-    if os.path.isfile(path_a):
-        bigfile_a = from_dat(path_a, config, config_path)
-    else:
-        bigfile_a = from_unpacked(path_a, config)
-
-    if os.path.isfile(path_b):
-        bigfile_b = from_dat(path_b, config, config_path)
-    else:
-        bigfile_b = from_unpacked(path_b, config)
-
-    if len(bigfile_a.folder_list) != len(bigfile_b.folder_list):
+    if len(a.folder_list) != len(b.folder_list):
         errors.append(
-            f"Mismatch between number of folders! a: {len(bigfile_a.folder_list)}, b: {len(bigfile_b.folder_list)}"
+            f"Mismatch between number of folders! a: {len(a.folder_list)}, b: {len(b.folder_list)}"
         )
 
-    if bigfile_a.size != bigfile_b.size:
+    if a.size != b.size:
         errors.append(
-            f"Mismatch between file sizes! a: {bigfile_a.size} bytes, b: {bigfile_b.size} bytes"
+            f"Mismatch between file sizes! a: {a.size} bytes, b: {b.size} bytes"
         )
 
-    compare_unmapped_data(bigfile_a.unmapped_data, bigfile_b.unmapped_data, errors)
+    compare_unmapped_data(a.unmapped_data, b.unmapped_data, errors)
 
-    for i, (a, b) in enumerate(zip(bigfile_a.folder_list, bigfile_b.folder_list)):
-        compare_folder(a, b, i, errors)
+    for i, (folder_a, folder_b) in enumerate(zip(a.folder_list, b.folder_list)):
+        compare_folder(folder_a, folder_b, i, errors)
 
     return errors
 
@@ -453,7 +441,18 @@ if __name__ == "__main__":
         case "compare":
             assert os.path.exists(args.input1), f"Input {args.input1} does not exist!"
             assert os.path.exists(args.input2), f"Input {args.input2} does not exist!"
-            errors = compare(args.input1, args.input2, config, args.config)
+
+            if os.path.isfile(args.input1):
+                a = from_dat(args.input1, config, args.config)
+            else:
+                a = from_unpacked(args.input1, config)
+
+            if os.path.isfile(args.input2):
+                b = from_dat(args.input2, config, args.config)
+            else:
+                b = from_unpacked(args.input2, config)
+
+            errors = compare(a, b)
 
             if len(errors) > 0:
                 print(f"Differences found between '{args.input1}' and '{args.input2}:")
