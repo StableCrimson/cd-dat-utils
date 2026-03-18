@@ -196,6 +196,12 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str) -> None:
                     outfile.write(file.contents)
 
 
+def write_unmapped_data(unmapped_data: FileEntry, writer: BufferedWriter):
+    if unmapped_data.contents is not None:
+        writer.seek(unmapped_data.offset)
+        writer.write(unmapped_data.contents)
+
+
 def write_file(file: FileEntry, header_offset: int, writer: BufferedWriter):
     if file.contents:
         writer.seek(header_offset)
@@ -234,9 +240,8 @@ def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
                 offset = (i * FOLDER_ENTRY_SIZE) + 4
                 write_folder(folder, offset, writer)
 
-            if bigfile.unmapped_data and bigfile.unmapped_data.contents:
-                writer.seek(bigfile.unmapped_data.offset)
-                writer.write(bigfile.unmapped_data.contents)
+            if bigfile.unmapped_data:
+                write_unmapped_data(bigfile.unmapped_data, writer)
 
 
 def from_unpacked(input_dir: str, config: dict) -> BigFile:
@@ -398,17 +403,26 @@ if __name__ == "__main__":
     pack_parser = subparsers.add_parser("pack", help="Pack files")
     pack_parser.add_argument("input", help="Input path")
     pack_parser.add_argument("output", help="Output path")
+    pack_parser.add_argument(
+        "config",
+        default="config.json",
+        help="Path to JSON config. Defaults to 'config.json'",
+    )
 
     unpack_parser = subparsers.add_parser("unpack", help="Unpack files")
     unpack_parser.add_argument("input", help="Input path")
     unpack_parser.add_argument("output", help="Output path")
+    unpack_parser.add_argument(
+        "config",
+        default="config.json",
+        help="Path to JSON config. Defaults to 'config.json'",
+    )
 
     compare_parser = subparsers.add_parser("compare", help="Compare files")
     compare_parser.add_argument("input1", help="First input path")
     compare_parser.add_argument("input2", help="Second input path")
-
-    parser.add_argument(
-        "--config",
+    compare_parser.add_argument(
+        "config",
         default="config.json",
         help="Path to JSON config. Defaults to 'config.json'",
     )
