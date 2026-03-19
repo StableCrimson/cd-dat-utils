@@ -347,44 +347,44 @@ def test_unpack_bigfile_deletes_existing_dir(mock_rmtree: Mock, mock_exists: Moc
 def test_compare_unmapped_data():
     a = FileEntry(size=0, offset=0, hash=0, checksum=0, contents=(b"\x11" * 3))
     b = FileEntry(size=1, offset=1, hash=0, checksum=0, contents=(b"\x11" * 4))
-    errors = []
 
-    compare_unmapped_data(a, b, 0, errors)
+    mismatches = compare_unmapped_data(a, b, 0)
 
-    assert len(errors) == 3
-    assert "Size" in errors[0]
-    assert "Offset" in errors[1]
-    assert "Content" in errors[2]
+    assert len(mismatches) == 3
+    assert "Size" in mismatches[0]
+    assert "Offset" in mismatches[1]
+    assert "Content" in mismatches[2]
 
 
 def test_compare_file():
     a = FileEntry(size=0, offset=0, hash=0, checksum=0, contents=(b"\x11" * 3))
     b = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=(b"\x11" * 4))
-    errors = []
 
-    compare_file(a, b, 0, 0, errors)
+    mismatches = compare_file(a, b, 0, 0)
 
-    assert len(errors) == 5
-    assert "size" in errors[0]
-    assert "offset" in errors[1]
-    assert "hash" in errors[2]
-    assert "checksum" in errors[3]
-    assert "contents" in errors[4]
+    assert len(mismatches) == 5
+    assert "size" in mismatches[0]
+    assert "offset" in mismatches[1]
+    assert "hash" in mismatches[2]
+    assert "checksum" in mismatches[3]
+    assert "contents" in mismatches[4]
 
 
 @patch("src.dat_utils.compare_file")
 def test_compare_folder(mock_compare_file: Mock):
     a = FolderEntry(offset=0, magic=0, encryption=0, file_list=[Mock(FileEntry)] * 3)
     b = FolderEntry(offset=1, magic=1, encryption=1, file_list=[Mock(FileEntry)] * 4)
-    errors = []
 
-    compare_folder(a, b, 0, errors)
+    mock_compare_file.side_effect = [["some file mismatch"], [], []]
 
-    assert len(errors) == 4
-    assert "files" in errors[0]
-    assert "offset" in errors[1]
-    assert "magic" in errors[2]
-    assert "encryption" in errors[3]
+    mismatches = compare_folder(a, b, 0)
+
+    assert len(mismatches) == 5
+    assert "files" in mismatches[0]
+    assert "offset" in mismatches[1]
+    assert "magic" in mismatches[2]
+    assert "encryption" in mismatches[3]
+    assert mismatches[-1] == "some file mismatch"
     assert mock_compare_file.call_count == 3
 
 

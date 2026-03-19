@@ -36,10 +36,8 @@ python dat_utils.py pack <src_dir> <dest_file> <config_path>
 To compare 2 BIGFILEs (packed or unpacked):
 
 ```bash
-python dat_utils.py compare <path_a> <path_b> <config_path>
+python src.dat_utils.py compare <path_a> <path_b> <config_path>
 ```
-
-If no config path is provided, it will default to `./config.json`
 
 ## Config
 
@@ -87,7 +85,7 @@ The structure of the config file is as follows:
 
 - `file_names` - Optional. A map of file hashes to their respective names. Used for naming files during unpacking, and reading files during repacking. Files without name mappings will be named `<file_hash>.bin`.
 
-- `unmapped_data` - Optional. Stores the byte offsets and sizes of any non-padding data that is not considered a file. Not needed to package the file but required for a perfect match. Will be written to `<output>/unmapped_data/unmapped_<offset>.bin` in the output directory.
+- `unmapped_data` - Optional. Stores the byte offsets and sizes of any non-padding data that is not considered a file. Not needed to package the file but may be required for a perfect match. When unpacking, these segments will be written to `<output_dir>/unmapped_data/unmapped_<offset>.bin` in the output directory.
 
 ---
 
@@ -96,7 +94,6 @@ BIGFILE spec from [PlayStation Specification psx-spx](https://psx-spx.consoledev
 ## Planned Features
 
 - [ ] Encryption support
-- [ ] Deduplication flag
 - [ ] Compression + decompression
 - [ ] Overlay utils (undo and redo mem relocation)
 - [ ] Config as YAML file

@@ -1,21 +1,21 @@
-# Python
-.venv/
-__pycache__/
+# Project-specific
+*.DAT
+output/
+*.json
+
+# Only include sample data and config for testing
+!tests/test_data/*
 
 # Testing
 .pytest_cache/
 .coverage
 
-# Only include sample data and config for testing
-!tests/test_data/*
+# Python
+.venv/
+__pycache__/
 
 # MacOS
 .DS_Store
 
 # Editor artifacts
 .vscode/
-
-# Project-specific
-*.DAT
-output/
-*.json
