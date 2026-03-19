@@ -24,22 +24,22 @@ pip install -r requirements.txt
 To unpack a BIGFILE:
 
 ```bash
-python dat_utils.py unpack <src_file> <dest_dir>
+python dat_utils.py unpack <src_file> <dest_dir> <config_path>
 ```
 
 To pack a folder into a BIGFILE:
 
 ```bash
-python dat_utils.py pack <src_dir> <dest_file>
+python dat_utils.py pack <src_dir> <dest_file> <config_path>
 ```
 
 To compare 2 BIGFILEs (packed or unpacked):
 
 ```bash
-python dat_utils.py compare <path_a> <path_b>
+python dat_utils.py compare <path_a> <path_b> <config_path>
 ```
 
-The config path defaults to `config.json`, though a different path can be provided using `-c` or `--config`.
+If no config path is provided, it will default to `./config.json`
 
 ## Config
 
@@ -73,10 +73,13 @@ The structure of the config file is as follows:
     "file_hash": "file_name",
     ...
   },
-  "unmapped_data": {
-    "size": 123456,
-    "offset": 7890
-  }
+  "unmapped_data": [
+    {
+      "size": 123456,
+      "offset": 7890
+    },
+    ...
+  ]
 }
 ```
 
@@ -84,7 +87,7 @@ The structure of the config file is as follows:
 
 - `file_names` - Optional. A map of file hashes to their respective names. Used for naming files during unpacking, and reading files during repacking. Files without name mappings will be named `<file_hash>.bin`.
 
-- `unmapped_data` - Optional. Stores the byte offset and size of any non-padding data that is not considered a file. Not needed to package the file but required for a perfect match. Will be written to `UNMAPPED_DATA.bin` in the output directory.
+- `unmapped_data` - Optional. Stores the byte offsets and sizes of any non-padding data that is not considered a file. Not needed to package the file but required for a perfect match. Will be written to `<output>/unmapped_data/unmapped_<offset>.bin` in the output directory.
 
 ---
 
@@ -95,7 +98,5 @@ BIGFILE spec from [PlayStation Specification psx-spx](https://psx-spx.consoledev
 - [ ] Encryption support
 - [ ] Deduplication flag
 - [ ] Compression + decompression
-- [ ] Multiple unmapped data segments
 - [ ] Overlay utils (undo and redo mem relocation)
-- [ ] Test suite
 - [ ] Config as YAML file

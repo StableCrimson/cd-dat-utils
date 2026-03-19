@@ -70,18 +70,18 @@ def test_from_dat():
     bigfile = from_dat(DAT_PATH, CONFIG, CONFIG_PATH)
 
     assert len(bigfile.folder_list) == 2
-    assert bigfile.unmapped_data is not None
-    assert bigfile.unmapped_data.size == 100
-    assert bigfile.unmapped_data.contents == b"\x44" * 100
+    assert len(bigfile.unmapped_data) == 1
+    assert bigfile.unmapped_data[0].size == 100
+    assert bigfile.unmapped_data[0].contents == b"\x44" * 100
 
 
 def test_from_unpacked():
     bigfile = from_unpacked(UNPACKED_PATH, CONFIG)
 
     assert len(bigfile.folder_list) == 2
-    assert bigfile.unmapped_data is not None
-    assert bigfile.unmapped_data.size == 100
-    assert bigfile.unmapped_data.contents == b"\x44" * 100
+    assert len(bigfile.unmapped_data) == 1
+    assert bigfile.unmapped_data[0].size == 100
+    assert bigfile.unmapped_data[0].contents == b"\x44" * 100
 
 
 @patch("os.path.exists")
@@ -208,7 +208,7 @@ def test_pack_bigfile(mock_open: Mock, mock_write_folder: Mock, _):
 def test_pack_bigfile_writes_unmapped_data(
     mock_open: Mock, mock_write_folder: Mock, mock_write_unmapped: Mock
 ):
-    file = BigFile(size=1, folder_list=[], unmapped_data=Mock(FileEntry))
+    file = BigFile(size=1, folder_list=[], unmapped_data=[Mock(FileEntry)] * 15)
 
     mock_open.return_value = NamedTemporaryFile("wb")
 
@@ -216,7 +216,7 @@ def test_pack_bigfile_writes_unmapped_data(
 
     assert mock_write_folder.call_count == len(file.folder_list)
     mock_open.assert_called_once_with("fake_dir", "wb", 0)
-    mock_write_unmapped.assert_called_once()
+    assert mock_write_unmapped.call_count == len(file.unmapped_data)
 
 
 @patch("os.makedirs")
@@ -224,14 +224,16 @@ def test_pack_bigfile_writes_unmapped_data(
 @patch("builtins.open")
 @patch("os.path.exists")
 def test_unpack_bigfile_writes_unmapped_data(mock_exists: Mock, mock_open: Mock, *_):
-    unmapped_data = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=b"\x01")
+    unmapped_data = FileEntry(size=1, offset=1234, hash=1, checksum=1, contents=b"\x01")
 
-    file = BigFile(size=1, folder_list=[], unmapped_data=unmapped_data)
+    file = BigFile(size=1, folder_list=[], unmapped_data=[unmapped_data])
     mock_exists.return_value = False
 
     unpack_bigfile(file, CONFIG, "fake_dir")
 
-    mock_open.assert_has_calls([call("fake_dir/UNMAPPED_DATA.bin", "wb")], True)
+    mock_open.assert_has_calls(
+        [call("fake_dir/unmapped_data/unmapped_1234.bin", "wb")], True
+    )
 
 
 @patch("os.makedirs")
@@ -347,24 +349,12 @@ def test_compare_unmapped_data():
     b = FileEntry(size=1, offset=1, hash=0, checksum=0, contents=(b"\x11" * 4))
     errors = []
 
-    compare_unmapped_data(a, b, errors)
+    compare_unmapped_data(a, b, 0, errors)
 
     assert len(errors) == 3
     assert "Size" in errors[0]
     assert "Offset" in errors[1]
     assert "Content" in errors[2]
-
-    errors = []
-    compare_unmapped_data(a, None, errors)
-
-    assert len(errors) == 1
-    assert "has unmapped data" in errors[0]
-
-    errors = []
-    compare_unmapped_data(None, b, errors)
-
-    assert len(errors) == 1
-    assert "has no unmapped data" in errors[0]
 
 
 def test_compare_file():
@@ -401,16 +391,21 @@ def test_compare_folder(mock_compare_file: Mock):
 @patch("src.dat_utils.compare_folder")
 @patch("src.dat_utils.compare_unmapped_data")
 def test_compare_bigfile(mock_compare_unmapped: Mock, mock_compare_folder: Mock):
-    a = BigFile(size=0, folder_list=[Mock(FolderEntry)] * 2)
-    b = BigFile(size=1, folder_list=[Mock(FolderEntry)] * 3)
+    a = BigFile(
+        size=0, folder_list=[Mock(FolderEntry)] * 2, unmapped_data=[Mock(FileEntry)] * 3
+    )
+    b = BigFile(
+        size=1, folder_list=[Mock(FolderEntry)] * 3, unmapped_data=[Mock(FileEntry)] * 4
+    )
 
     errors = compare(a, b)
 
-    assert len(errors) == 2
+    assert len(errors) == 3
     assert "folders" in errors[0]
-    assert "size" in errors[1]
+    assert "unmapped sections" in errors[1]
+    assert "size" in errors[2]
     assert mock_compare_folder.call_count == 2
-    mock_compare_unmapped.assert_called()
+    assert mock_compare_unmapped.call_count == 3
 
 
 def test_compare_e2e():

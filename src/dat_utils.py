@@ -29,7 +29,7 @@ class FolderEntry(BaseModel):
 class BigFile(BaseModel):
     size: int
     folder_list: list[FolderEntry]
-    unmapped_data: FileEntry | None = Field(exclude=True, default=None)
+    unmapped_data: list[FileEntry] = Field(exclude=True, default=[])
 
 
 # TODO: If this isn't used in multiple CD titles, make a function table with the different hash methods so
@@ -121,10 +121,7 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
         size = file.tell()
         file.seek(0)
 
-        bigfile = BigFile(
-            size=size,
-            folder_list=[],
-        )
+        bigfile = BigFile(size=size, folder_list=[], unmapped_data=[])
 
         num_folders = int.from_bytes(file.read(2), "little")
         file.read(2)
@@ -133,17 +130,18 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
             offset = (i * FOLDER_ENTRY_SIZE) + 4
             bigfile.folder_list.append(read_folder(file, offset))
 
-        unmapped_data = config.get("unmapped_data")
+        unmapped_data = config.get("unmapped_data", [])
 
-        if unmapped_data is not None:
-            file.seek(unmapped_data["offset"])
-
-            bigfile.unmapped_data = FileEntry(
-                size=unmapped_data["size"],
-                offset=unmapped_data["offset"],
-                hash=0,
-                checksum=0,
-                contents=file.read(unmapped_data["size"]),
+        for unmapped in unmapped_data:
+            file.seek(unmapped["offset"])
+            bigfile.unmapped_data.append(
+                FileEntry(
+                    size=unmapped["size"],
+                    offset=unmapped["offset"],
+                    hash=0,
+                    checksum=0,
+                    contents=file.read(unmapped["size"]),
+                )
             )
 
         if config.get("structure") is None:
@@ -161,9 +159,15 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str) -> None:
 
     os.makedirs(output_dir)
 
-    if bigfile.unmapped_data and bigfile.unmapped_data.contents:
-        with open(os.path.join(output_dir, "UNMAPPED_DATA.bin"), "wb") as f:
-            f.write(bigfile.unmapped_data.contents)
+    for unmapped in bigfile.unmapped_data:
+        with open(
+            os.path.join(
+                output_dir, "unmapped_data", f"unmapped_{unmapped.offset}.bin"
+            ),
+            "wb",
+        ) as f:
+            if unmapped.contents is not None:
+                f.write(unmapped.contents)
 
     duplicates = {}
 
@@ -240,8 +244,8 @@ def pack_bigfile(bigfile: BigFile, output_path: str) -> None:
                 offset = (i * FOLDER_ENTRY_SIZE) + 4
                 write_folder(folder, offset, writer)
 
-            if bigfile.unmapped_data:
-                write_unmapped_data(bigfile.unmapped_data, writer)
+            for i, unmapped in enumerate(bigfile.unmapped_data):
+                write_unmapped_data(unmapped, writer)
 
 
 def from_unpacked(input_dir: str, config: dict) -> BigFile:
@@ -281,43 +285,43 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
             with open(full_file_path, "rb") as f:
                 file.contents = f.read()
 
-    unmapped_data = config.get("unmapped_data")
+    unmapped_data = config.get("unmapped_data", [])
 
-    if unmapped_data is not None:
-        with open(os.path.join(input_dir, "UNMAPPED_DATA.bin"), "rb") as f:
-            bigfile.unmapped_data = FileEntry(
-                size=unmapped_data["size"],
-                offset=unmapped_data["offset"],
-                hash=0,
-                checksum=0,
-                contents=f.read(),
+    for unmapped in unmapped_data:
+        with open(
+            os.path.join(
+                input_dir, "unmapped_data", f"unmapped_{unmapped['offset']}.bin"
+            ),
+            "rb",
+        ) as f:
+            bigfile.unmapped_data.append(
+                FileEntry(
+                    size=unmapped["size"],
+                    offset=unmapped["offset"],
+                    hash=0,
+                    checksum=0,
+                    contents=f.read(),
+                )
             )
 
     return bigfile
 
 
-def compare_unmapped_data(a: FileEntry | None, b: FileEntry | None, errors: list[str]):
-    if a is None and b is not None:
-        errors.append("Unmapped data mismatch! a has no unmapped data, but b does")
-        return
+def compare_unmapped_data(
+    a: FileEntry, b: FileEntry, unmapped_idx: int, errors: list[str]
+):
+    if a.size != b.size:
+        errors.append(
+            f"Size mismatch for unmapped data segment {unmapped_idx}! a: {a.size} bytes, b: {b.size} bytes"
+        )
 
-    if a is not None and b is None:
-        errors.append("Unmapped data mismatch! a has unmapped data, but b doesn't")
-        return
+    if a.offset != b.offset:
+        errors.append(
+            f"Offset mismatch for unmapped data segment {unmapped_idx}! a: {a.offset}, b: {b.offset}"
+        )
 
-    if a is not None and b is not None:
-        if a.size != b.size:
-            errors.append(
-                f"Size mismatch for unmapped data! a: {a.size} bytes, b: {b.size} bytes"
-            )
-
-        if a.offset != b.offset:
-            errors.append(
-                f"Offset mismatch for unmapped data! a: {a.offset}, b: {b.offset}"
-            )
-
-        if a.contents != b.contents:
-            errors.append("Content mismatch for unmapped data!")
+    if a.contents != b.contents:
+        errors.append(f"Content mismatch for unmapped data segment {unmapped_idx}!")
 
 
 def compare_file(
@@ -382,12 +386,18 @@ def compare(a: BigFile, b: BigFile) -> list[str]:
             f"Mismatch between number of folders! a: {len(a.folder_list)}, b: {len(b.folder_list)}"
         )
 
+    if len(a.unmapped_data) != len(b.unmapped_data):
+        errors.append(
+            f"Mismatch between number of unmapped sections! a: {len(a.unmapped_data)}, b: {len(b.unmapped_data)}"
+        )
+
     if a.size != b.size:
         errors.append(
             f"Mismatch between file sizes! a: {a.size} bytes, b: {b.size} bytes"
         )
 
-    compare_unmapped_data(a.unmapped_data, b.unmapped_data, errors)
+    for i, (unmapped_a, unmapped_b) in enumerate(zip(a.unmapped_data, b.unmapped_data)):
+        compare_unmapped_data(unmapped_a, unmapped_b, i, errors)
 
     for i, (folder_a, folder_b) in enumerate(zip(a.folder_list, b.folder_list)):
         compare_folder(folder_a, folder_b, i, errors)

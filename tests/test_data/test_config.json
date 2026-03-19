@@ -4,10 +4,12 @@
     "2037191072": "dir_1\\test_file2.drm",
     "2579342152": "dir_2\\test_file3.bin"
   },
-  "unmapped_data": {
-    "size": 100,
-    "offset": 12288
-  },
+  "unmapped_data": [
+    {
+      "size": 100,
+      "offset": 12288
+    }
+  ],
   "structure": {
     "size": 12388,
     "folder_list": [
