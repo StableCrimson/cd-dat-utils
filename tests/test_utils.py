@@ -70,7 +70,7 @@ def test_from_dat():
     bigfile = from_dat(DAT_PATH, CONFIG, CONFIG_PATH)
 
     assert len(bigfile.folder_list) == 2
-    assert len(bigfile.unmapped_data) == 1
+    assert len(bigfile.unmapped_data) == 2
     assert bigfile.unmapped_data[0].size == 100
     assert bigfile.unmapped_data[0].contents == b"\x44" * 100
 
@@ -79,7 +79,7 @@ def test_from_unpacked():
     bigfile = from_unpacked(UNPACKED_PATH, CONFIG)
 
     assert len(bigfile.folder_list) == 2
-    assert len(bigfile.unmapped_data) == 1
+    assert len(bigfile.unmapped_data) == 2
     assert bigfile.unmapped_data[0].size == 100
     assert bigfile.unmapped_data[0].contents == b"\x44" * 100
 

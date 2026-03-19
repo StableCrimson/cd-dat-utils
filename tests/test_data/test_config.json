@@ -8,10 +8,14 @@
     {
       "size": 100,
       "offset": 12288
+    },
+    {
+      "size": 100,
+      "offset": 12388
     }
   ],
   "structure": {
-    "size": 12388,
+    "size": 12488,
     "folder_list": [
       {
         "offset": 2048,
