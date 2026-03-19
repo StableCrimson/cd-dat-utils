@@ -1,6 +1,21 @@
-.venv/
+# Project-specific
 *.DAT
 output/
-.DS_Store
 *.json
+
+# Only include sample data and config for testing
+!tests/test_data/*
+
+# Testing
+.pytest_cache/
+.coverage
+
+# Python
+.venv/
 __pycache__/
+
+# MacOS
+.DS_Store
+
+# Editor artifacts
+.vscode/

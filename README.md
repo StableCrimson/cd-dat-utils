@@ -11,7 +11,7 @@ No support for encrypted or compressed files at this time.
 
 PSX games published by Crystal Dynamics often contain a file on the disc called `BIGFILE.DAT`, which is a giant blob of files such as fonts, sounds, images, code, etc. This utility was made as a tool to assist with decompiling games that use BIGFILEs, since the overlays for these games are contained within them.
 
-Since the PSX only had 2MB of RAM, it was inefficient to load all of the game's code into memory at once. Some pieces of code aren't always needed, and so they would be wasting space if they were loaded in memory the entire time. The solution to this problem is overlays. Overlays are small pieces of executable code that can be loaded and unloaded at runtime, very similar to DLLs. This allows situational code (such as enemy AI), to only be loaded when it's needed, and can be removed from memory when the game no longer needs it.
+Since the PSX only had 2MB of RAM, it was inefficient (or even impossible) to load all of the game's code into memory at once. Some pieces of code aren't always needed, and so they would be wasting space if they were loaded in memory the entire time. The solution to this problem is overlays. Overlays are small pieces of executable code that can be loaded and unloaded at runtime, very similar to DLLs. This allows situational code (such as enemy AI), to only be loaded when it's needed, and can be removed from memory when the game no longer needs it.
 
 ## Usage
 
@@ -24,22 +24,20 @@ pip install -r requirements.txt
 To unpack a BIGFILE:
 
 ```bash
-python dat_utils.py unpack <src_file> <dest_dir>
+python dat_utils.py unpack <src_file> <dest_dir> <config_path>
 ```
 
 To pack a folder into a BIGFILE:
 
 ```bash
-python dat_utils.py pack <src_dir> <dest_file>
+python dat_utils.py pack <src_dir> <dest_file> <config_path>
 ```
 
 To compare 2 BIGFILEs (packed or unpacked):
 
 ```bash
-python dat_utils.py compare <path_a> <path_b>
+python src.dat_utils.py compare <path_a> <path_b> <config_path>
 ```
-
-The config path defaults to `config.json`, though a different path can be provided using `-c` or `--config`.
 
 ## Config
 
@@ -73,19 +71,29 @@ The structure of the config file is as follows:
     "file_hash": "file_name",
     ...
   },
-  "unmapped_data": {
-    "size": 123456,
-    "offset": 7890
-  }
+  "unmapped_data": [
+    {
+      "size": 123456,
+      "offset": 7890
+    },
+    ...
+  ]
 }
 ```
 
-- `structure` - Required. The serialized structure of the file. This is automatically written when the file is unpacked.
+- `structure` - The serialized structure of the file. Required for packing. This will be automatically written to the config file when unpacking for the first time.
 
 - `file_names` - Optional. A map of file hashes to their respective names. Used for naming files during unpacking, and reading files during repacking. Files without name mappings will be named `<file_hash>.bin`.
 
-- `unmapped_data` - Optional. Stores the byte offset and size of any non-padding data that is not considered a file. Required for a perfect match. Will be written to `UNMAPPED_DATA.bin` in the output directory.
+- `unmapped_data` - Optional. Stores the byte offsets and sizes of any non-padding data that is not considered a file. Not needed to package the file but may be required for a perfect match. When unpacking, these segments will be written to `<output_dir>/unmapped_data/unmapped_<offset>.bin` in the output directory.
 
 ---
 
 BIGFILE spec from [PlayStation Specification psx-spx](https://psx-spx.consoledev.net/cdromfileformats/#legacy-of-kain-soul-reaver-bigfiledat)
+
+## Planned Features
+
+- [ ] Encryption support
+- [ ] Compression + decompression
+- [ ] Overlay utils (undo and redo mem relocation)
+- [ ] Config as YAML file
