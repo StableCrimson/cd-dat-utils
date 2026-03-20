@@ -216,11 +216,21 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
 
     os.makedirs(output_dir)
 
-    for unmapped in bigfile.unmapped_data:
-        if unmapped.contents is not None:
-            filename = f"unmapped_{unmapped.offset}.bin"
-            with open(os.path.join(output_dir, "unmapped_data", filename), "wb") as f:
-                f.write(unmapped.contents)
+    if len(bigfile.unmapped_data) > 0:
+        unmapped_folder = os.path.join(output_dir, "unmapped_data")
+
+        if os.path.exists(unmapped_folder):
+            shutil.rmtree(unmapped_folder)
+
+        Path(unmapped_folder).mkdir(parents=True)
+
+        for unmapped in bigfile.unmapped_data:
+            if unmapped.contents is not None:
+                filename = f"unmapped_{unmapped.offset}.bin"
+                with open(
+                    os.path.join(output_dir, "unmapped_data", filename), "wb"
+                ) as f:
+                    f.write(unmapped.contents)
 
     duplicates = {}
 
@@ -596,6 +606,13 @@ def main():
     compare_parser.add_argument(
         "config", help="Path to JSON config. Defaults to 'config.json'"
     )
+
+    compare_parser = subparsers.add_parser(
+        name="unrelocate",
+        help="Undo overlay memory address relocations",
+        description="Undo overlay memory address relocations",
+    )
+    compare_parser.add_argument("input", help="Path to the overlay")
 
     args = parser.parse_args()
 
