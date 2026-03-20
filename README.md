@@ -15,28 +15,28 @@ Since the PSX only had 2MB of RAM, it was inefficient (or even impossible) to lo
 
 ## Usage
 
-First, make sure to install the requirements via:
+First, make sure to install the util via:
 
 ```bash
-pip install -r requirements.txt
+pip install .
 ```
 
 To unpack a BIGFILE:
 
 ```bash
-python dat_utils.py unpack <src_file> <dest_dir> <config_path>
+cd-dat-utils unpack <src_file> <dest_dir> <config_path>
 ```
 
 To pack a folder into a BIGFILE:
 
 ```bash
-python dat_utils.py pack <src_dir> <dest_file> <config_path>
+cd-dat-utils pack <src_dir> <dest_file> <config_path>
 ```
 
 To compare 2 BIGFILEs (packed or unpacked):
 
 ```bash
-python src.dat_utils.py compare <path_a> <path_b> <config_path>
+cd-dat-utils compare <path_a> <path_b> <config_path>
 ```
 
 ## Config
