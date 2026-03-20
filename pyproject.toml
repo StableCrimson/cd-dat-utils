@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cd-dat-utils"
+version = "0.0.0"
+description = "A command line utility for working with BIGFILEs"
+requires-python = ">=3.10"
+dependencies = ['pydantic==2.11.7', 'pyyaml==6.0.3']
+
+[project.scripts]
+cd-dat-utils = "dat_utils:main"
+
+[dependency-groups]
+dev = ['pytest==9.0.1', 'pytest-cov==7.0.0']

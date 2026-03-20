@@ -558,12 +558,17 @@ def compare(a: BigFile, b: BigFile) -> list[str]:
     return mismatches
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+def main():
+    parser = argparse.ArgumentParser(
+        prog="cd-dat-utils",
+        description="A command line utility for working with BIGFILEs",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    pack_parser = subparsers.add_parser("pack", help="Pack files")
+    pack_parser = subparsers.add_parser(
+        name="pack", help="Pack files", description="Pack files"
+    )
     pack_parser.add_argument("input", help="Input path")
     pack_parser.add_argument("output", help="Output path")
     pack_parser.add_argument(
@@ -572,7 +577,9 @@ if __name__ == "__main__":
         help="Path to JSON config. Defaults to 'config.json'",
     )
 
-    unpack_parser = subparsers.add_parser("unpack", help="Unpack files")
+    unpack_parser = subparsers.add_parser(
+        name="unpack", help="Unpack files", description="Unpack files"
+    )
     unpack_parser.add_argument("input", help="Input path")
     unpack_parser.add_argument("output", help="Output path")
     unpack_parser.add_argument(
@@ -581,7 +588,9 @@ if __name__ == "__main__":
         help="Path to JSON config. Defaults to 'config.json'",
     )
 
-    compare_parser = subparsers.add_parser("compare", help="Compare files")
+    compare_parser = subparsers.add_parser(
+        name="compare", help="Compare files", description="Compare files"
+    )
     compare_parser.add_argument("input1", help="First input path")
     compare_parser.add_argument("input2", help="Second input path")
     compare_parser.add_argument(
@@ -637,3 +646,7 @@ if __name__ == "__main__":
                 print(
                     f"No differences found between '{args.input1}' and '{args.input2}'"
                 )
+
+
+if __name__ == "__main__":
+    main()
