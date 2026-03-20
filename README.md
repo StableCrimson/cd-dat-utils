@@ -1,11 +1,9 @@
 # cd-dat-utils
 
-
-
 Utility for working with BIGFILEs in Crystal Dynamics games.
 
 > [!NOTE]
-> cd-dat-utils is still an experimental tool under development. Usage and configuration is subject to change. As of now, it is developed for use with the Legacy of Kain: Soul Reaver project. Compatibility for other CD titles *at this time* is not guaranteed.
+> cd-dat-utils is still an experimental tool under development. Usage and configuration is subject to change. As of now, it is developed for use with the Legacy of Kain: Soul Reaver project. Compatibility for other CD titles _at this time_ is not guaranteed.
 
 ## Context
 

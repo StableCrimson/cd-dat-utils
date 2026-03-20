@@ -1,27 +1,29 @@
-from io import BufferedReader, BytesIO
-from unittest.mock import Mock, patch, call
-from copy import deepcopy
-import pytest
-from tempfile import NamedTemporaryFile
 import json
+from copy import deepcopy
+from io import BufferedReader, BytesIO
+from tempfile import NamedTemporaryFile
+from unittest.mock import Mock, call, patch
+
+import pytest
+
 from src.dat_utils import (
+    BigFile,
+    FileEntry,
+    FolderEntry,
+    compare,
+    compare_file,
+    compare_folder,
+    compare_unmapped_data,
+    from_dat,
+    from_unpacked,
+    hash_from_file_path,
+    pack_bigfile,
     read_file,
     read_folder,
+    unpack_bigfile,
     write_file,
     write_folder,
     write_unmapped_data,
-    from_dat,
-    from_unpacked,
-    unpack_bigfile,
-    pack_bigfile,
-    hash_from_file_path,
-    compare_unmapped_data,
-    compare_file,
-    compare_folder,
-    compare,
-    FileEntry,
-    FolderEntry,
-    BigFile,
 )
 
 DAT_PATH = "tests/test_data/hello_dat.DAT"
@@ -114,8 +116,11 @@ def test_from_unpacked_raises_no_structure(_: Mock, mock_exists: Mock):
         from_unpacked("some_file", config)
 
 
+@patch("struct.unpack")
 @patch("builtins.open")
-def test_from_unpacked_writes_structure_if_not_present(mock_open: Mock):
+def test_from_unpacked_writes_structure_if_not_present(
+    mock_open: Mock, mock_unpack: Mock
+):
     expected_path = "some_path.json"
     config = {}
 
