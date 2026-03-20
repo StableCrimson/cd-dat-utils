@@ -1,11 +1,11 @@
 # cd-dat-utils
 
+
+
 Utility for working with BIGFILEs in Crystal Dynamics games.
 
-Only works for Legact of Kain: Soul Reaver. But would like to add support for other
-Crystal Dynamics titles.
-
-No support for encrypted or compressed files at this time.
+> [!NOTE]
+> cd-dat-utils is still an experimental tool under development. Usage and configuration is subject to change. As of now, it is developed for use with the Legacy of Kain: Soul Reaver project. Compatibility for other CD titles *at this time* is not guaranteed.
 
 ## Context
 
@@ -13,13 +13,27 @@ PSX games published by Crystal Dynamics often contain a file on the disc called 
 
 Since the PSX only had 2MB of RAM, it was inefficient (or even impossible) to load all of the game's code into memory at once. Some pieces of code aren't always needed, and so they would be wasting space if they were loaded in memory the entire time. The solution to this problem is overlays. Overlays are small pieces of executable code that can be loaded and unloaded at runtime, very similar to DLLs. This allows situational code (such as enemy AI), to only be loaded when it's needed, and can be removed from memory when the game no longer needs it.
 
-## Usage
+## Installation
 
-First, make sure to install the util via:
+To install locally:
 
 ```bash
 pip install .
 ```
+
+To install in another project you can install via CLI:
+
+```bash
+pip install git+https://github.com/StableCrimson/cd-dat-utils
+```
+
+or add to your requirements file:
+
+```bash
+git+https://github.com/StableCrimson/cd-dat-utils
+```
+
+## Usage
 
 To unpack a BIGFILE:
 
