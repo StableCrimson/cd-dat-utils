@@ -2,7 +2,13 @@
 *.DAT
 output/
 *.json
+*.bin
+*.drm
+
+# Tooling
 *.egg-info/
+.mypy_cache/
+.ruff_cache
 
 # Only include sample data and config for testing
 !tests/test_data/*

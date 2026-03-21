@@ -1,14 +1,27 @@
-from io import BufferedWriter
-import os
-import json
-import shutil
 import argparse
-from typing import BinaryIO
+import json
+import os
+import shutil
+from io import BufferedWriter
 from pathlib import Path
+from struct import pack, unpack
+from typing import BinaryIO
+
 from pydantic import BaseModel, Field
 
+PADDING = 0
+
+BIGFILE_HEADER_SIZE = 4
+"""Size in bytes of BIGFILE header"""
+
 FOLDER_ENTRY_SIZE = 8
+"""Size in bytes of folder entry"""
+
+FOLDER_RECORD_SIZE = 4
+"""Size in bytes of folder header preceding files"""
+
 FILE_ENTRY_SIZE = 16
+"""Size in bytes of file entry"""
 
 
 class FileEntry(BaseModel):
@@ -35,16 +48,15 @@ class BigFile(BaseModel):
 # TODO: If this isn't used in multiple CD titles, make a function table with the different hash methods so
 #       they can be specified in the config.
 def hash_from_file_path(file_path: str) -> int:
-    """
-    Generate a hash from a file path using the algorithm from Legacy of Kain: Soul Reaver.
+    """Generate a hash from a file path using the algorithm from Legacy of Kain: Soul Reaver.
 
     Args:
         file_path (str): The path of the file relative to the BIGFILE root.
 
     Returns:
         int: The hash generated from the file path.
-    """
 
+    """
     HASH_EXTENSIONS = ["drm", "crm", "tim", "smp", "snd", "smf", "snf"]
 
     sum = 0
@@ -75,43 +87,37 @@ def hash_from_file_path(file_path: str) -> int:
     return (length << 27) | (sum << 15) | (xor << 3) | ext_index
 
 
-def read_file(file: BinaryIO, offset: int) -> FileEntry:
-    """
-    Given a binary bytestream and a file header offset,
+def read_file(file: BinaryIO, header_offset: int) -> FileEntry:
+    """Given a binary bytestream and a file header offset,
     read the header and contents to create a `FileEntry`.
 
     Args:
         file (BinaryIO): The binary source to read from.
-        offset (int): The byte offset of the file header entry.
+        header_offset (int): The byte offset of the file header entry.
 
     Returns:
         FileEntry: The parsed file header and its contents.
+
     """
-
+    file.seek(header_offset)
+    hash, size, offset, checksum = unpack("<IIII", file.read(FILE_ENTRY_SIZE))
     file.seek(offset)
-    hash = int.from_bytes(file.read(4), "little")
-    size = int.from_bytes(file.read(4), "little")
-    file_offset = int.from_bytes(file.read(4), "little")
-    checksum = int.from_bytes(file.read(4), "little")
 
-    file.seek(file_offset)
     return FileEntry(
         size=size,
-        offset=file_offset,
+        offset=offset,
         hash=hash,
         checksum=checksum,
         contents=file.read(size),
     )
 
 
-def read_folder(file: BinaryIO, offset: int) -> FolderEntry:
-    """
-    Given a binary bytestream and a folder header offset,
-    read the header and all files it contains to create a `FolderEntry`.
+def read_folder(file: BinaryIO, header_offset: int) -> FolderEntry:
+    """Given a binary bytestream and a folder header offset, read the header and all files it contains to create a `FolderEntry`.
 
     Args:
         file (BinaryIO): The binary source to read from.
-        offset (int): The byte offset of the folder header entry.
+        header_offset (int): The byte offset of the folder header entry.
 
     Returns:
         FolderEntry: The parsed folder header and all files within it.
@@ -120,22 +126,21 @@ def read_folder(file: BinaryIO, offset: int) -> FolderEntry:
         AssertionError: If the folder contains encryption, which is not supported at this time.
         AssertionError: If there is a mismatch between the number of files stated in the folder header and
                         the actual folder record
-    """
 
-    file.seek(offset)
-    magic = int.from_bytes(file.read(2), "little")
-    num_files = int.from_bytes(file.read(2), "little")
-    folder_offset = int.from_bytes(file.read(4), "little")
+    """
+    file.seek(header_offset)
+    magic, num_files, offset = unpack("<HHI", file.read(FOLDER_ENTRY_SIZE))
+
     folder = FolderEntry(
-        offset=folder_offset,
+        offset=offset,
         magic=magic,
         encryption=0,  # TODO
         file_list=[],
     )
 
-    file.seek(folder_offset)
-    num_files_record = int.from_bytes(file.read(2), "little")
-    assert file.read(2) == b"\x00\x00", (
+    file.seek(offset)
+    num_files_record, encryption = unpack("<HH", file.read(FOLDER_RECORD_SIZE))
+    assert encryption == PADDING, (
         "Encrypted bytes found. Encryption not supported at this time."
     )
 
@@ -144,15 +149,14 @@ def read_folder(file: BinaryIO, offset: int) -> FolderEntry:
     )
 
     for i in range(num_files):
-        entry_offset = (i * FILE_ENTRY_SIZE) + folder_offset + 4
+        entry_offset = (i * FILE_ENTRY_SIZE) + offset + FOLDER_RECORD_SIZE
         folder.file_list.append(read_file(file, entry_offset))
 
     return folder
 
 
 def from_dat(path: str, config: dict, config_path: str) -> BigFile:
-    """
-    Create a `BigFile` instance from a packed DAT.
+    """Create a `BigFile` instance from a packed DAT.
 
     Args:
         path (str): The path to the DAT file.
@@ -162,8 +166,8 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
 
     Returns:
         BigFile: The parsed BIGFILE.
-    """
 
+    """
     with open(path, "rb") as file:
         file.seek(0, os.SEEK_END)
         size = file.tell()
@@ -171,11 +175,10 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
 
         bigfile = BigFile(size=size, folder_list=[], unmapped_data=[])
 
-        num_folders = int.from_bytes(file.read(2), "little")
-        file.read(2)
+        num_folders, *_ = unpack("<HH", file.read(BIGFILE_HEADER_SIZE))
 
         for i in range(num_folders):
-            offset = (i * FOLDER_ENTRY_SIZE) + 4
+            offset = (i * FOLDER_ENTRY_SIZE) + BIGFILE_HEADER_SIZE
             bigfile.folder_list.append(read_folder(file, offset))
 
         unmapped_data = config.get("unmapped_data", [])
@@ -202,15 +205,14 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
 
 
 def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
-    """
-    Unpack a parsed BIGFILE to a target folder.
+    """Unpack a parsed BIGFILE to a target folder.
 
     Args:
         bigfile (BigFile): Parsed BIGFILE to be unpacked.
         config (dict): The BIGFILE config.
         output_dir (str): Path to the directory where the unpacked contents will be written.
-    """
 
+    """
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
 
@@ -219,20 +221,17 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
     if len(bigfile.unmapped_data) > 0:
         unmapped_folder = os.path.join(output_dir, "unmapped_data")
 
-        if os.path.exists(unmapped_folder):
-            shutil.rmtree(unmapped_folder)
-
-        Path(unmapped_folder).mkdir(parents=True)
+        if not os.path.exists(unmapped_folder):
+            Path(unmapped_folder).mkdir(parents=True, exist_ok=True)
 
         for unmapped in bigfile.unmapped_data:
             if unmapped.contents is not None:
                 filename = f"unmapped_{unmapped.offset}.bin"
-                with open(
-                    os.path.join(output_dir, "unmapped_data", filename), "wb"
-                ) as f:
+                path = os.path.join(output_dir, "unmapped_data", filename)
+                with open(path, "wb") as f:
                     f.write(unmapped.contents)
 
-    duplicates = {}
+    duplicates: dict[str, int] = {}
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
@@ -264,12 +263,12 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
 
 
 def write_unmapped_data(unmapped_data: FileEntry, buffer: BufferedWriter):
-    """
-    Writes an unmapped segment to a BIGFILE.
+    """Write an unmapped segment to a BIGFILE.
 
     Args:
         unmapped_data (FileEntry): The FileEntry of the corresponding unmapped region to be written.
         buffer (BufferedWriter): The buffer the unmapped region will be written to.
+
     """
     if unmapped_data.contents is not None:
         buffer.seek(unmapped_data.offset)
@@ -277,66 +276,56 @@ def write_unmapped_data(unmapped_data: FileEntry, buffer: BufferedWriter):
 
 
 def write_file(file: FileEntry, header_offset: int, buffer: BufferedWriter):
-    """
-    Writes a file to a BIGFILE.
+    """Write a file to a BIGFILE.
 
     Args:
         file (FileEntry): The FileEntry to be written.
         header_offset (int): The byte offset where the file header should be written.
         buffer (BufferedWriter): The buffer the file will be written to.
+
     """
     if file.contents:
         buffer.seek(header_offset)
-        buffer.write(file.hash.to_bytes(4, "little"))
-        buffer.write(file.size.to_bytes(4, "little"))
-        buffer.write(file.offset.to_bytes(4, "little"))
-        buffer.write(file.checksum.to_bytes(4, "little"))
+        buffer.write(pack("<IIII", file.hash, file.size, file.offset, file.checksum))
 
         buffer.seek(file.offset)
         buffer.write(file.contents)
 
 
 def write_folder(folder: FolderEntry, header_offset: int, buffer: BufferedWriter):
-    """
-    Writes a folder and all files it contains to a BIGFILE.
+    """Write a folder and all files it contains to a BIGFILE.
 
     Args:
-        file (FileEntry): The FileEntry to be written.
+        folder (FolderEntry): The FolderEntry to be written.
         header_offset (int): The byte offset where the folder header should be written.
         buffer (BufferedWriter): The buffer the folder will be written to.
+
     """
-
     buffer.seek(header_offset)
-
-    buffer.write(folder.magic.to_bytes(2, "little"))
-    buffer.write(len(folder.file_list).to_bytes(2, "little"))
-    buffer.write(folder.offset.to_bytes(4, "little"))
+    buffer.write(pack("<HHI", folder.magic, len(folder.file_list), folder.offset))
 
     buffer.seek(folder.offset)
-    buffer.write(len(folder.file_list).to_bytes(2, "little"))
-    buffer.write(b"\x00\x00")
+    buffer.write(pack("<HH", len(folder.file_list), PADDING))
 
     for i, file in enumerate(folder.file_list):
-        offset = (i * FILE_ENTRY_SIZE) + folder.offset + 4
+        offset = (i * FILE_ENTRY_SIZE) + folder.offset + FOLDER_RECORD_SIZE
         write_file(file, offset, buffer)
 
 
 def pack_bigfile(bigfile: BigFile, output_path: str):
-    """
-    Packs and writes a `BigFile` object to a DAT.
+    """Packs and writes a `BigFile` object to a DAT.
 
     Args:
         bigfile (BigFile): The BigFile to be written.
         output_path (str): The desired path of the resulting DAT file.
-    """
 
+    """
     with open(output_path, "wb", 0) as f:
         with BufferedWriter(f, bigfile.size) as buffer:
-            buffer.write(len(bigfile.folder_list).to_bytes(2, "little"))
-            buffer.write(b"\x00\x00")
+            buffer.write(pack("<HH", len(bigfile.folder_list), PADDING))
 
             for i, folder in enumerate(bigfile.folder_list):
-                offset = (i * FOLDER_ENTRY_SIZE) + 4
+                offset = (i * FOLDER_ENTRY_SIZE) + BIGFILE_HEADER_SIZE
                 write_folder(folder, offset, buffer)
 
             for i, unmapped in enumerate(bigfile.unmapped_data):
@@ -344,8 +333,7 @@ def pack_bigfile(bigfile: BigFile, output_path: str):
 
 
 def from_unpacked(input_dir: str, config: dict) -> BigFile:
-    """
-    Create a `BigFile` instance from an unpacked DAT.
+    """Create a `BigFile` instance from an unpacked DAT.
 
     Args:
         input_dir (str): The path to the unpacked BIGFILE directory.
@@ -358,8 +346,8 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
         Exception: If the source directory cannot be found
         Exception: If the config does not contain the `structure` component
         Exception: If one of the unpacked files cannot be found
-    """
 
+    """
     if not os.path.exists(input_dir):
         raise Exception(f"Input directory {input_dir} does not exist")
 
@@ -415,8 +403,7 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
 
 
 def compare_unmapped_data(a: FileEntry, b: FileEntry, segment_idx: int) -> list[str]:
-    """
-    Compare two unmapped data segments.
+    """Compare two unmapped data segments.
 
     Args:
         a (FileEntry): The first segment in the comparison.
@@ -425,8 +412,8 @@ def compare_unmapped_data(a: FileEntry, b: FileEntry, segment_idx: int) -> list[
 
     Returns:
         list[str]: List of all mismatches between the two segments.
-    """
 
+    """
     mismatches = []
 
     if a.size != b.size:
@@ -448,8 +435,7 @@ def compare_unmapped_data(a: FileEntry, b: FileEntry, segment_idx: int) -> list[
 def compare_file(
     a: FileEntry, b: FileEntry, folder_idx: int, file_idx: int
 ) -> list[str]:
-    """
-    Compare two `FileEntry` instances.
+    """Compare two `FileEntry` instances.
 
     Args:
         a (FileEntry): The first file entry in the comparison.
@@ -459,8 +445,8 @@ def compare_file(
 
     Returns:
         list[str]: List of all mismatches between the two entries.
-    """
 
+    """
     mismatches = []
 
     if a.size != b.size:
@@ -492,8 +478,7 @@ def compare_file(
 
 
 def compare_folder(a: FolderEntry, b: FolderEntry, folder_idx: int) -> list[str]:
-    """
-    Compare two `FolderEntry` instances.
+    """Compare two `FolderEntry` instances.
 
     Args:
         a (FolderEntry): The first folder entry in the comparison.
@@ -502,6 +487,7 @@ def compare_folder(a: FolderEntry, b: FolderEntry, folder_idx: int) -> list[str]
 
     Returns:
         list[str]: List of all mismatches between the two folders.
+
     """
     mismatches = []
 
@@ -532,8 +518,7 @@ def compare_folder(a: FolderEntry, b: FolderEntry, folder_idx: int) -> list[str]
 
 
 def compare(a: BigFile, b: BigFile) -> list[str]:
-    """
-    Compare two `BigFile` instances.
+    """Compare two `BigFile` instances.
 
     Args:
         a (BigFile): The first `BigFile` in the comparison.
@@ -541,6 +526,7 @@ def compare(a: BigFile, b: BigFile) -> list[str]:
 
     Returns:
         list[str]: List of all mismatches between the two folders.
+
     """
     mismatches = []
 
