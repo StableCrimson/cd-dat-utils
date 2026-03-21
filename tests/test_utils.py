@@ -2,7 +2,7 @@ import json
 from copy import deepcopy
 from io import BufferedReader, BytesIO
 from tempfile import NamedTemporaryFile
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call, mock_open, patch
 
 import pytest
 
@@ -117,14 +117,17 @@ def test_from_unpacked_raises_no_structure(_: Mock, mock_exists: Mock):
 
 
 @patch("struct.unpack")
-@patch("builtins.open")
+@patch("builtins.open", new_callable=mock_open, read_data=b"\x00" * 100)
 def test_from_unpacked_writes_structure_if_not_present(
     mock_open: Mock, mock_unpack: Mock
 ):
     expected_path = "some_path.json"
     config = {}
 
+    # mock_open.return_value = NamedTemporaryFile("rb", buffering=4)
+
     _ = from_dat(DAT_PATH, config, expected_path)
+    mock_unpack.return_value = (0, 0)
 
     assert config.get("structure") is not None
     mock_open.assert_called_with(expected_path, "w")

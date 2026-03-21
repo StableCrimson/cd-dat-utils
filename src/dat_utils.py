@@ -231,7 +231,7 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
                 with open(path, "wb") as f:
                     f.write(unmapped.contents)
 
-    duplicates = {}
+    duplicates: dict[str, int] = {}
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
