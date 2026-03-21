@@ -2,6 +2,8 @@
 *.DAT
 output/
 *.json
+*.bin
+*.drm
 
 # Tooling
 *.egg-info/
