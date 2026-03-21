@@ -2,6 +2,7 @@
 *.DAT
 output/
 *.json
+*.yaml
 *.bin
 *.drm
 
