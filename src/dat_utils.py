@@ -87,37 +87,37 @@ def hash_from_file_path(file_path: str) -> int:
     return (length << 27) | (sum << 15) | (xor << 3) | ext_index
 
 
-def read_file(file: BinaryIO, offset: int) -> FileEntry:
+def read_file(file: BinaryIO, header_offset: int) -> FileEntry:
     """Given a binary bytestream and a file header offset,
     read the header and contents to create a `FileEntry`.
 
     Args:
         file (BinaryIO): The binary source to read from.
-        offset (int): The byte offset of the file header entry.
+        header_offset (int): The byte offset of the file header entry.
 
     Returns:
         FileEntry: The parsed file header and its contents.
 
     """
+    file.seek(header_offset)
+    hash, size, offset, checksum = unpack("<IIII", file.read(FILE_ENTRY_SIZE))
     file.seek(offset)
-    hash, size, file_offset, checksum = unpack("<IIII", file.read(FILE_ENTRY_SIZE))
-    file.seek(file_offset)
 
     return FileEntry(
         size=size,
-        offset=file_offset,
+        offset=offset,
         hash=hash,
         checksum=checksum,
         contents=file.read(size),
     )
 
 
-def read_folder(file: BinaryIO, offset: int) -> FolderEntry:
+def read_folder(file: BinaryIO, header_offset: int) -> FolderEntry:
     """Given a binary bytestream and a folder header offset, read the header and all files it contains to create a `FolderEntry`.
 
     Args:
         file (BinaryIO): The binary source to read from.
-        offset (int): The byte offset of the folder header entry.
+        header_offset (int): The byte offset of the folder header entry.
 
     Returns:
         FolderEntry: The parsed folder header and all files within it.
@@ -128,17 +128,17 @@ def read_folder(file: BinaryIO, offset: int) -> FolderEntry:
                         the actual folder record
 
     """
-    file.seek(offset)
-    magic, num_files, folder_offset = unpack("<HHI", file.read(FOLDER_ENTRY_SIZE))
+    file.seek(header_offset)
+    magic, num_files, offset = unpack("<HHI", file.read(FOLDER_ENTRY_SIZE))
 
     folder = FolderEntry(
-        offset=folder_offset,
+        offset=offset,
         magic=magic,
         encryption=0,  # TODO
         file_list=[],
     )
 
-    file.seek(folder_offset)
+    file.seek(offset)
     num_files_record, encryption = unpack("<HH", file.read(FOLDER_RECORD_SIZE))
     assert encryption == PADDING, (
         "Encrypted bytes found. Encryption not supported at this time."
@@ -149,7 +149,7 @@ def read_folder(file: BinaryIO, offset: int) -> FolderEntry:
     )
 
     for i in range(num_files):
-        entry_offset = (i * FILE_ENTRY_SIZE) + folder_offset + FOLDER_RECORD_SIZE
+        entry_offset = (i * FILE_ENTRY_SIZE) + offset + FOLDER_RECORD_SIZE
         folder.file_list.append(read_file(file, entry_offset))
 
     return folder
