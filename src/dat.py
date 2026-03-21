@@ -39,10 +39,16 @@ class FolderEntry(BaseModel):
     file_list: list[FileEntry]
 
 
+class UnmappedEntry(BaseModel):
+    size: int
+    offset: int
+    contents: bytes | None = Field(exclude=True, default=None)
+
+
 class BigFile(BaseModel):
     size: int
     folder_list: list[FolderEntry]
-    unmapped_data: list[FileEntry] = Field(exclude=True, default=[])
+    unmapped_data: list[UnmappedEntry] = Field(default=[])
 
 
 # TODO: If this isn't used in multiple CD titles, make a function table with the different hash methods so
@@ -186,11 +192,9 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
         for unmapped in unmapped_data:
             file.seek(unmapped["offset"])
             bigfile.unmapped_data.append(
-                FileEntry(
+                UnmappedEntry(
                     size=unmapped["size"],
                     offset=unmapped["offset"],
-                    hash=0,
-                    checksum=0,
                     contents=file.read(unmapped["size"]),
                 )
             )
@@ -262,12 +266,12 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
                     outfile.write(file.contents)
 
 
-def write_unmapped_data(unmapped_data: FileEntry, buffer: BufferedWriter):
+def write_unmapped_data(unmapped_data: UnmappedEntry, buffer: BufferedWriter):
     """Write an unmapped segment to a BIGFILE.
 
     Args:
-        unmapped_data (FileEntry): The FileEntry of the corresponding unmapped region to be written.
-        buffer (BufferedWriter): The buffer the unmapped region will be written to.
+        unmapped_data (UnmappedEntry): The unmapped segment to be written.
+        buffer (BufferedWriter): The buffer the unmapped segment will be written to.
 
     """
     if unmapped_data.contents is not None:
@@ -390,24 +394,22 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
         filename = f"unmapped_{unmapped['offset']}.bin"
         with open(os.path.join(input_dir, "unmapped_data", filename), "rb") as f:
             bigfile.unmapped_data.append(
-                FileEntry(
-                    size=unmapped["size"],
-                    offset=unmapped["offset"],
-                    hash=0,
-                    checksum=0,
-                    contents=f.read(),
+                UnmappedEntry(
+                    size=unmapped["size"], offset=unmapped["offset"], contents=f.read()
                 )
             )
 
     return bigfile
 
 
-def compare_unmapped_data(a: FileEntry, b: FileEntry, segment_idx: int) -> list[str]:
+def compare_unmapped_data(
+    a: UnmappedEntry, b: UnmappedEntry, segment_idx: int
+) -> list[str]:
     """Compare two unmapped data segments.
 
     Args:
-        a (FileEntry): The first segment in the comparison.
-        b (FileEntry): The second segment in the comparison.
+        a (UnmappedEntry): The first segment in the comparison.
+        b (UnmappedEntry): The second segment in the comparison.
         segment_idx (int): Index of the unmapped segment.
 
     Returns:
