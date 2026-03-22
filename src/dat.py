@@ -93,6 +93,9 @@ def hash_from_file_path(file_path: str) -> int:
     return (length << 27) | (sum << 15) | (xor << 3) | ext_index
 
 
+# TODO: Make all of these class methods
+
+
 def read_file(file: BinaryIO, header_offset: int) -> FileEntry:
     """Given a binary bytestream and a file header offset,
     read the header and contents to create a `FileEntry`.

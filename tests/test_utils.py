@@ -10,6 +10,7 @@ from dat import (
     BigFile,
     FileEntry,
     FolderEntry,
+    UnmappedEntry,
     compare,
     compare_file,
     compare_folder,
@@ -55,7 +56,7 @@ def test_read_file():
     assert parsed_file.contents == expected_contents.encode("ascii")
 
 
-@patch("src.dat.read_file")
+@patch("dat.read_file")
 def test_read_folder(mock_read_file: Mock):
     folder_bytes = open("tests/test_data/hello_folder.bin", "rb").read()
     reader = BufferedReader(BytesIO(folder_bytes))
@@ -156,7 +157,7 @@ def test_write_file():
         assert f.read() == expected
 
 
-@patch("src.dat.write_file")
+@patch("dat.write_file")
 def test_write_folder(mock_write_file: Mock):
     temp_folder = NamedTemporaryFile("wb")
 
@@ -179,12 +180,8 @@ def test_write_folder(mock_write_file: Mock):
 
 
 def test_write_unmapped_data():
-    unmapped = FileEntry(
-        size=0,
-        offset=0,
-        hash=0,
-        checksum=0,
-        contents="this is unmapped data".encode("ascii"),
+    unmapped = UnmappedEntry(
+        size=0, offset=0, contents="this is unmapped data".encode("ascii")
     )
 
     file = NamedTemporaryFile("wb")
@@ -196,8 +193,8 @@ def test_write_unmapped_data():
         assert f.read() == "this is unmapped data".encode("ascii")
 
 
-@patch("src.dat.write_unmapped_data")
-@patch("src.dat.write_folder")
+@patch("dat.write_unmapped_data")
+@patch("dat.write_folder")
 @patch("builtins.open")
 def test_pack_bigfile(mock_open: Mock, mock_write_folder: Mock, _):
     file = BigFile(size=1, folder_list=[Mock(FolderEntry)] * 2)
@@ -210,13 +207,13 @@ def test_pack_bigfile(mock_open: Mock, mock_write_folder: Mock, _):
     mock_open.assert_called_once_with("fake_dir", "wb", 0)
 
 
-@patch("src.dat.write_unmapped_data")
-@patch("src.dat.write_folder")
+@patch("dat.write_unmapped_data")
+@patch("dat.write_folder")
 @patch("builtins.open")
 def test_pack_bigfile_writes_unmapped_data(
     mock_open: Mock, mock_write_folder: Mock, mock_write_unmapped: Mock
 ):
-    file = BigFile(size=1, folder_list=[], unmapped_data=[Mock(FileEntry)] * 15)
+    file = BigFile(size=1, folder_list=[], unmapped_data=[Mock(UnmappedEntry)] * 15)
 
     mock_open.return_value = NamedTemporaryFile("wb")
 
@@ -232,7 +229,7 @@ def test_pack_bigfile_writes_unmapped_data(
 @patch("builtins.open")
 @patch("os.path.exists")
 def test_unpack_bigfile_writes_unmapped_data(mock_exists: Mock, mock_open: Mock, *_):
-    unmapped_data = FileEntry(size=1, offset=1234, hash=1, checksum=1, contents=b"\x01")
+    unmapped_data = UnmappedEntry(size=1, offset=1234, contents=b"\x01")
 
     file = BigFile(size=1, folder_list=[], unmapped_data=[unmapped_data])
     mock_exists.return_value = False
@@ -353,8 +350,8 @@ def test_unpack_bigfile_deletes_existing_dir(mock_rmtree: Mock, mock_exists: Moc
 
 
 def test_compare_unmapped_data():
-    a = FileEntry(size=0, offset=0, hash=0, checksum=0, contents=(b"\x11" * 3))
-    b = FileEntry(size=1, offset=1, hash=0, checksum=0, contents=(b"\x11" * 4))
+    a = UnmappedEntry(size=0, offset=0, contents=(b"\x11" * 3))
+    b = UnmappedEntry(size=1, offset=1, contents=(b"\x11" * 4))
 
     mismatches = compare_unmapped_data(a, b, 0)
 
@@ -378,7 +375,7 @@ def test_compare_file():
     assert "contents" in mismatches[4]
 
 
-@patch("src.dat.compare_file")
+@patch("dat.compare_file")
 def test_compare_folder(mock_compare_file: Mock):
     a = FolderEntry(offset=0, magic=0, encryption=0, file_list=[Mock(FileEntry)] * 3)
     b = FolderEntry(offset=1, magic=1, encryption=1, file_list=[Mock(FileEntry)] * 4)
@@ -396,14 +393,18 @@ def test_compare_folder(mock_compare_file: Mock):
     assert mock_compare_file.call_count == 3
 
 
-@patch("src.dat.compare_folder")
-@patch("src.dat.compare_unmapped_data")
+@patch("dat.compare_folder")
+@patch("dat.compare_unmapped_data")
 def test_compare_bigfile(mock_compare_unmapped: Mock, mock_compare_folder: Mock):
     a = BigFile(
-        size=0, folder_list=[Mock(FolderEntry)] * 2, unmapped_data=[Mock(FileEntry)] * 3
+        size=0,
+        folder_list=[Mock(FolderEntry)] * 2,
+        unmapped_data=[Mock(UnmappedEntry)] * 3,
     )
     b = BigFile(
-        size=1, folder_list=[Mock(FolderEntry)] * 3, unmapped_data=[Mock(FileEntry)] * 4
+        size=1,
+        folder_list=[Mock(FolderEntry)] * 3,
+        unmapped_data=[Mock(UnmappedEntry)] * 4,
     )
 
     errors = compare(a, b)
