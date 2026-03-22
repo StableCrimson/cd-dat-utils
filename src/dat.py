@@ -7,7 +7,11 @@ from pathlib import Path
 from struct import pack, unpack
 from typing import BinaryIO
 
+import pylibyaml  # Needed - Patches several `yaml` methods for huge performance improvements
+import yaml
 from pydantic import BaseModel, Field
+
+from utils.config import Config
 
 PADDING = 0
 
@@ -49,6 +53,24 @@ class BigFile(BaseModel):
     size: int
     folder_list: list[FolderEntry]
     unmapped_data: list[UnmappedEntry] = Field(default=[])
+
+    @classmethod
+    def from_json(cls, path: str):
+        with open(path) as f:
+            return cls.model_validate(json.loads(f.read()) or {})
+
+    def write_json(self, path: str):
+        with open(path, "w") as f:
+            json.dump(self.model_dump(), f, indent=2)
+
+    @classmethod
+    def from_yaml(cls, path: str):
+        with open(path) as f:
+            return cls.model_validate(yaml.safe_load(f.read()) or {})
+
+    def write_yaml(self, path: str):
+        with open(path, "w") as f:
+            f.write(yaml.safe_dump(self.model_dump(), sort_keys=False, indent=2))
 
 
 # TODO: If this isn't used in multiple CD titles, make a function table with the different hash methods so
@@ -164,20 +186,19 @@ def read_folder(file: BinaryIO, header_offset: int) -> FolderEntry:
     return folder
 
 
-def from_dat(path: str, config: dict, config_path: str) -> BigFile:
+def from_dat(config: Config) -> BigFile:
     """Create a `BigFile` instance from a packed DAT.
 
     Args:
-        path (str): The path to the DAT file.
-        config (dict): The BIGFILE config.
-        config_path (str): Path to the config file. Used to automatically write the BIGFILE
-                            structure if not already present in the config.
+        config (Config): The BIGFILE config.
 
     Returns:
         BigFile: The parsed BIGFILE.
 
     """
-    with open(path, "rb") as file:
+    assert config.bigfile is not None, "`bigfile` is missing from config!"
+
+    with open(config.bigfile.src_path, "rb") as file:
         file.seek(0, os.SEEK_END)
         size = file.tell()
         file.seek(0)
@@ -190,43 +211,43 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
             offset = (i * FOLDER_ENTRY_SIZE) + BIGFILE_HEADER_SIZE
             bigfile.folder_list.append(read_folder(file, offset))
 
-        unmapped_data = config.get("unmapped_data", [])
+        if not os.path.exists(config.bigfile.structure_path):
+            print("File structure config does not exist. Writing...")
+            bigfile.write_yaml(config.bigfile.structure_path)
+        else:
+            structure = BigFile.from_yaml(config.bigfile.structure_path)
 
-        for unmapped in unmapped_data:
-            file.seek(unmapped["offset"])
-            bigfile.unmapped_data.append(
-                UnmappedEntry(
-                    size=unmapped["size"],
-                    offset=unmapped["offset"],
-                    contents=file.read(unmapped["size"]),
+            for unmapped in structure.unmapped_data:
+                file.seek(unmapped.offset)
+                bigfile.unmapped_data.append(
+                    UnmappedEntry(
+                        size=unmapped.size,
+                        offset=unmapped.offset,
+                        contents=file.read(unmapped.size),
+                    )
                 )
-            )
-
-        if config.get("structure") is None:
-            print("File structure not found in config. Writing...")
-            config["structure"] = bigfile.model_dump()
-            with open(config_path, "w") as f:
-                json.dump(config, f, indent=2)
 
         return bigfile
 
 
-def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
+def unpack_bigfile(bigfile: BigFile, config: Config):
     """Unpack a parsed BIGFILE to a target folder.
 
     Args:
         bigfile (BigFile): Parsed BIGFILE to be unpacked.
-        config (dict): The BIGFILE config.
-        output_dir (str): Path to the directory where the unpacked contents will be written.
+        config (Config): The BIGFILE config.
 
     """
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
 
-    os.makedirs(output_dir)
+    assert config.bigfile is not None, "`bigfile` is missing from config!"
+
+    if os.path.exists(config.bigfile.unpacked_path):
+        shutil.rmtree(config.bigfile.unpacked_path)
+
+    os.makedirs(config.bigfile.unpacked_path)
 
     if len(bigfile.unmapped_data) > 0:
-        unmapped_folder = os.path.join(output_dir, "unmapped_data")
+        unmapped_folder = os.path.join(config.bigfile.unpacked_path, "unmapped_data")
 
         if not os.path.exists(unmapped_folder):
             Path(unmapped_folder).mkdir(parents=True, exist_ok=True)
@@ -234,7 +255,9 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
         for unmapped in bigfile.unmapped_data:
             if unmapped.contents is not None:
                 filename = f"unmapped_{unmapped.offset}.bin"
-                path = os.path.join(output_dir, "unmapped_data", filename)
+                path = os.path.join(
+                    config.bigfile.unpacked_path, "unmapped_data", filename
+                )
                 with open(path, "wb") as f:
                     f.write(unmapped.contents)
 
@@ -242,9 +265,7 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
-            file_name = config.get("file_names", {}).get(
-                str(file.hash), f"{file.hash}.bin"
-            )
+            file_name = config.bigfile.file_map.get(file.hash, f"{file.hash}.bin")
 
             if file_name not in duplicates.keys():
                 duplicates[file_name] = 0
@@ -253,11 +274,11 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
                 base, ext = os.path.splitext(file_name)
                 file_name = f"{base}_duplicate{duplicates[file_name]}{ext}"
 
-            full_path = os.path.join(output_dir, file_name)
+            full_path = os.path.join(config.bigfile.unpacked_path, file_name)
 
             if "\\" in file_name:
                 *subfolders, file_name = file_name.split("\\")
-                subpath = os.path.join(output_dir, *subfolders)
+                subpath = os.path.join(config.bigfile.unpacked_path, *subfolders)
 
                 if not os.path.exists(subpath):
                     Path(subpath).mkdir(parents=True, exist_ok=True)
@@ -319,7 +340,7 @@ def write_folder(folder: FolderEntry, header_offset: int, buffer: BufferedWriter
         write_file(file, offset, buffer)
 
 
-def pack_bigfile(bigfile: BigFile, output_path: str):
+def pack_bigfile(bigfile: BigFile, config: Config):
     """Packs and writes a `BigFile` object to a DAT.
 
     Args:
@@ -327,7 +348,9 @@ def pack_bigfile(bigfile: BigFile, output_path: str):
         output_path (str): The desired path of the resulting DAT file.
 
     """
-    with open(output_path, "wb", 0) as f:
+    assert config.bigfile is not None, "`bigfile` is missing from config!"
+
+    with open(config.bigfile.packed_path, "wb", 0) as f:
         with BufferedWriter(f, bigfile.size) as buffer:
             buffer.write(pack("<HH", len(bigfile.folder_list), PADDING))
 
@@ -339,12 +362,11 @@ def pack_bigfile(bigfile: BigFile, output_path: str):
                 write_unmapped_data(unmapped, buffer)
 
 
-def from_unpacked(input_dir: str, config: dict) -> BigFile:
+def from_unpacked(config: Config) -> BigFile:
     """Create a `BigFile` instance from an unpacked DAT.
 
     Args:
-        input_dir (str): The path to the unpacked BIGFILE directory.
-        config (dict): The BIGFILE config..
+        config (Config): The BIGFILE config.
 
     Returns:
         BigFile: The parsed BIGFILE.
@@ -355,20 +377,26 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
         Exception: If one of the unpacked files cannot be found
 
     """
-    if not os.path.exists(input_dir):
-        raise Exception(f"Input directory {input_dir} does not exist")
 
-    if config.get("structure") is None:
-        raise Exception("'structure' does not exist in config file!")
+    assert config.bigfile is not None, "`bigfile` is missing from config!"
 
-    bigfile = BigFile.model_validate_json(json.dumps(config["structure"]))
+    if not os.path.exists(config.bigfile.unpacked_path):
+        raise Exception(
+            f"Input directory {config.bigfile.unpacked_path} does not exist"
+        )
+
+    if not os.path.exists(config.bigfile.structure_path):
+        raise Exception(
+            f"BIGFILE structure '{config.bigfile.structure_path}' does not exist!"
+        )
+
+    bigfile: BigFile = BigFile.from_yaml(config.bigfile.structure_path)
 
     already_read_files: dict[str, int] = {}
-    file_names: dict[str, str] = config.get("file_names", {})
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
-            file_name = file_names.get(str(file.hash), f"{file.hash}.bin")
+            file_name = config.bigfile.file_map.get(file.hash, f"{file.hash}.bin")
 
             if already_read_files.get(file_name) is None:
                 already_read_files[file_name] = 0
@@ -377,11 +405,11 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
                 name, ext = file_name.rsplit(".", 1)
                 file_name = f"{name}_duplicate{already_read_files[file_name]}.{ext}"
 
-            full_file_path = os.path.join(input_dir, file_name)
+            full_file_path = os.path.join(config.bigfile.unpacked_path, file_name)
 
             if "\\" in file_name:
                 *subfolders, file_name = file_name.split("\\")
-                subpath = os.path.join(input_dir, *subfolders)
+                subpath = os.path.join(config.bigfile.unpacked_path, *subfolders)
 
                 full_file_path = os.path.join(subpath, file_name)
 
@@ -389,18 +417,16 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
                 raise Exception(f"File {full_file_path} cannot be found!")
 
             with open(full_file_path, "rb") as f:
-                file.contents = f.read()
+                file.contents = f.read(file.size)
 
-    unmapped_data = config.get("unmapped_data", [])
+    for unmapped in bigfile.unmapped_data:
+        filename = f"unmapped_{unmapped.offset}.bin"
+        segment_path = os.path.join(
+            config.bigfile.unpacked_path, "unmapped_data", filename
+        )
 
-    for unmapped in unmapped_data:
-        filename = f"unmapped_{unmapped['offset']}.bin"
-        with open(os.path.join(input_dir, "unmapped_data", filename), "rb") as f:
-            bigfile.unmapped_data.append(
-                UnmappedEntry(
-                    size=unmapped["size"], offset=unmapped["offset"], contents=f.read()
-                )
-            )
+        with open(segment_path, "rb") as f:
+            unmapped.contents = f.read(unmapped.size)
 
     return bigfile
 
@@ -570,22 +596,16 @@ def main():
     pack_parser = subparsers.add_parser(
         name="pack", help="Pack files", description="Pack files"
     )
-    pack_parser.add_argument("input", help="Input path")
-    pack_parser.add_argument("output", help="Output path")
     pack_parser.add_argument(
         "config",
-        default="config.json",
         help="Path to JSON config. Defaults to 'config.json'",
     )
 
     unpack_parser = subparsers.add_parser(
         name="unpack", help="Unpack files", description="Unpack files"
     )
-    unpack_parser.add_argument("input", help="Input path")
-    unpack_parser.add_argument("output", help="Output path")
     unpack_parser.add_argument(
         "config",
-        default="config.json",
         help="Path to JSON config. Defaults to 'config.json'",
     )
 
@@ -610,46 +630,38 @@ def main():
     if not os.path.exists(args.config):
         raise Exception(f"config file {args.config} could not be found")
 
-    with open(args.config) as f:
-        config = json.load(f)
+    config = Config.from_yaml(args.config)
+
+    print(config.bigfile.packed_path)
+    return
 
     match args.command:
         case "unpack":
-            assert os.path.exists(args.input), (
-                f"Input file {args.input} does not exist!"
-            )
-            assert os.path.isfile(args.input), f"Input file {args.input} is not a file!"
-            unpack_bigfile(
-                from_dat(args.input, config, args.config), config, args.output
-            )
+            unpack_bigfile(from_dat(config), config)
         case "pack":
-            assert os.path.exists(args.input), (
-                f"Input directory {args.input} does not exist!"
-            )
-            assert os.path.isdir(args.input), (
-                f"Input directory {args.input} is not a directory!"
-            )
-            pack_bigfile(from_unpacked(args.input, config), args.output)
+            pack_bigfile(from_unpacked(config), config)
         case "compare":
             assert os.path.exists(args.input1), f"Input {args.input1} does not exist!"
             assert os.path.exists(args.input2), f"Input {args.input2} does not exist!"
 
             if os.path.isfile(args.input1):
-                a = from_dat(args.input1, config, args.config)
+                a = from_dat(config)
             else:
-                a = from_unpacked(args.input1, config)
+                a = from_unpacked(config)
 
             if os.path.isfile(args.input2):
-                b = from_dat(args.input2, config, args.config)
+                b = from_dat(config)
             else:
-                b = from_unpacked(args.input2, config)
+                b = from_unpacked(config)
 
-            errors = compare(a, b)
+            mismatches = compare(a, b)
 
-            if len(errors) > 0:
-                print(f"Differences found between '{args.input1}' and '{args.input2}:")
-                for error in errors:
-                    print(f"\t{error}")
+            if len(mismatches) > 0:
+                print(
+                    f"{len(mismatches)} differences found between '{args.input1}' and '{args.input2}:"
+                )
+                for mismatch in mismatches:
+                    print(f"\t{mismatch}")
             else:
                 print(
                     f"No differences found between '{args.input1}' and '{args.input2}'"
