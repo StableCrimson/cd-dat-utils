@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = ['pydantic==2.11.7', 'pylibyaml==0.1.0', 'pyyaml==6.0.3']
 
 [project.scripts]
-cd-dat-utils = "cd_dat_utils.core.dat:main"
+cd-dat-utils = "cd_dat_utils.cli.__main__:main"
 
 [dependency-groups]
 dev = ['pytest==9.0.1', 'pytest-cov==7.0.0', 'types-PyYAML', 'ruff', 'mypy']
