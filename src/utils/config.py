@@ -1,3 +1,4 @@
+import os
 from typing import Optional
 
 import pylibyaml  # Needed - Patches several `yaml` methods for huge performance improvements

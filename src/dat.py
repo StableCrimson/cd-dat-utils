@@ -350,6 +350,10 @@ def pack_bigfile(bigfile: BigFile, config: Config):
     """
     assert config.bigfile is not None, "`bigfile` is missing from config!"
 
+    # NOTE: Just for the type checker.
+    # This is promised not to be None during instantiation
+    assert config.bigfile.packed_path is not None, "`packed_path` is not defined!"
+
     with open(config.bigfile.packed_path, "wb", 0) as f:
         with BufferedWriter(f, bigfile.size) as buffer:
             buffer.write(pack("<HH", len(bigfile.folder_list), PADDING))
@@ -631,9 +635,6 @@ def main():
         raise Exception(f"config file {args.config} could not be found")
 
     config = Config.from_yaml(args.config)
-
-    print(config.bigfile.packed_path)
-    return
 
     match args.command:
         case "unpack":
