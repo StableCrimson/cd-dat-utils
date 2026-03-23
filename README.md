@@ -83,11 +83,11 @@ This optional section contains the BIGFILE configuration. Required for BIGFILE o
 The file map (whose path is recorded in `file_map_path` in the config) is an optional file, but immensely helpful when working with unpacked files. It is just a YAML file mapping file hashes to their output paths. Ex:
 
 ```yaml
-2576260384: "game\\object\\ov1.drm"
-2576293153: "game\\object\\ov1.crm"
-2576293152: "game\\maps\\areaIntro.drm"
-2576293157: "game\\object\\enemy.smf"
-2576293158: "game\\object\\enemy.snf"
+2576260384: game\object\ov1.drm
+2576293153: game\object\ov1.crm
+2576293152: game\maps\areaIntro.drm
+2576293157: game\object\enemy.smf
+2576293158: game\object\enemy.snf
 ```
 
 ---

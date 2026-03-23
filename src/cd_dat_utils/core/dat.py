@@ -11,7 +11,7 @@ import pylibyaml  # Needed - Patches several `yaml` methods for huge performance
 import yaml
 from pydantic import BaseModel, Field
 
-from utils.config import Config
+from cd_dat_utils.core.config import Config
 
 PADDING = 0
 
@@ -29,6 +29,8 @@ FILE_ENTRY_SIZE = 16
 
 
 class FileEntry(BaseModel):
+    """A parsed file header and its contents."""
+
     size: int
     offset: int
     hash: int
@@ -37,6 +39,8 @@ class FileEntry(BaseModel):
 
 
 class FolderEntry(BaseModel):
+    """A parsed folder header and its constituent files."""
+
     offset: int
     magic: int
     encryption: int
@@ -44,31 +48,65 @@ class FolderEntry(BaseModel):
 
 
 class UnmappedEntry(BaseModel):
+    """Parsed segment of unmapped non-padding data and its contents."""
+
     size: int
     offset: int
     contents: bytes | None = Field(exclude=True, default=None)
 
 
 class BigFile(BaseModel):
+    """A fully parsed BIGFILE."""
+
     size: int
     folder_list: list[FolderEntry]
     unmapped_data: list[UnmappedEntry] = Field(default=[])
 
     @classmethod
     def from_json(cls, path: str):
+        """Create a `BigFile` instance from a JSON file.
+
+        Args:
+            path (str): Path to the JSON file.
+
+        Returns:
+            BigFile: The deserialized BIGFILE.
+
+        """
         with open(path) as f:
-            return cls.model_validate(json.loads(f.read()) or {})
+            return cls.model_validate(json.load(f) or {})
 
     def write_json(self, path: str):
+        """Write a `BigFile` instance to a JSON file.
+
+        Args:
+            path (str): Path to the JSON file.
+
+        """
         with open(path, "w") as f:
             json.dump(self.model_dump(), f, indent=2)
 
     @classmethod
     def from_yaml(cls, path: str):
+        """Create a `BigFile` instance from a YAML file.
+
+        Args:
+            path (str): Path to the YAML file.
+
+        Returns:
+            BigFile: The deserialized BIGFILE.
+
+        """
         with open(path) as f:
-            return cls.model_validate(yaml.safe_load(f.read()) or {})
+            return cls.model_validate(yaml.safe_load(f) or {})
 
     def write_yaml(self, path: str):
+        """Write a `BigFile` instance to a YAML file.
+
+        Args:
+            path (str): Path to the JSON file.
+
+        """
         with open(path, "w") as f:
             f.write(yaml.safe_dump(self.model_dump(), sort_keys=False, indent=2))
 
@@ -119,8 +157,7 @@ def hash_from_file_path(file_path: str) -> int:
 
 
 def read_file(file: BinaryIO, header_offset: int) -> FileEntry:
-    """Given a binary bytestream and a file header offset,
-    read the header and contents to create a `FileEntry`.
+    """Given a binary bytestream and a file header offset, read the header and contents to create a `FileEntry`.
 
     Args:
         file (BinaryIO): The binary source to read from.
@@ -235,10 +272,9 @@ def unpack_bigfile(bigfile: BigFile, config: Config):
 
     Args:
         bigfile (BigFile): Parsed BIGFILE to be unpacked.
-        config (Config): The BIGFILE config.
+        config (Config): The dat util config.
 
     """
-
     assert config.bigfile is not None, "`bigfile` is missing from config!"
 
     if os.path.exists(config.bigfile.unpacked_path):
@@ -345,7 +381,7 @@ def pack_bigfile(bigfile: BigFile, config: Config):
 
     Args:
         bigfile (BigFile): The BigFile to be written.
-        output_path (str): The desired path of the resulting DAT file.
+        config (Config): The dat util config.
 
     """
     assert config.bigfile is not None, "`bigfile` is missing from config!"
@@ -381,7 +417,6 @@ def from_unpacked(config: Config) -> BigFile:
         Exception: If one of the unpacked files cannot be found
 
     """
-
     assert config.bigfile is not None, "`bigfile` is missing from config!"
 
     if not os.path.exists(config.bigfile.unpacked_path):
@@ -589,7 +624,7 @@ def compare(a: BigFile, b: BigFile) -> list[str]:
     return mismatches
 
 
-def main():
+def main():  # noqa
     parser = argparse.ArgumentParser(
         prog="cd-dat-utils",
         description="A command line utility for working with BIGFILEs",

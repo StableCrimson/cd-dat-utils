@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 
 
 class BigFileConfig(BaseModel):
+    """Configuration for BIGFILE operations."""
+
     src_path: str
     """Path to the source BIGFILE"""
 
@@ -25,13 +27,53 @@ class BigFileConfig(BaseModel):
     file_map: dict[int, str] = Field(default={}, exclude=True)
     """Map of file hashes to their respective names"""
 
+    # TODO: Allow optional flag to process all configured overlays during unpacking
+
+    # TODO: Allow optional flag to preserve files with identical hashes
+
+
+class OverlayConfig(BaseModel):
+    """Configuration for a single overlay."""
+
+    name: str
+    """Name of the overlay"""
+
+    src_path: str
+    """Path to the source overlay binary"""
+
+    out_path: str
+    """Path to the un-relocated ovelay"""
+
+    relocs_path: str
+    """Path to the yaml containing relocation data for the overlay"""
+
+    # TODO: Allow optional flag to create splat config
+
 
 class Config(BaseModel):
+    """Configuration for the DAT utils."""
+
     bigfile: Optional[BigFileConfig] = Field(default=None)
     """Configuration for BIGFILE"""
 
+    overlays: Optional[list[OverlayConfig]] = Field(default=None)
+    """List of overlay configurations"""
+
     @classmethod
     def from_yaml(cls, path: str):
+        """Create a `Config` instance from YAML.
+
+        Args:
+            path (str): Path to the YAML file.
+
+        Returns:
+            Config: The validated configuration.
+
+        Raises:
+            ValidationError: If the YAML data does not abide by the `Config` spec.
+            Exception: If `file_map_path` is defined but does not exist.
+
+        """
         with open(path) as f:
             config = cls.model_validate(yaml.safe_load(f.read()) or {})
 
@@ -52,6 +94,12 @@ class Config(BaseModel):
 
         return config
 
-    def write(self, path: str):
+    def write_yaml(self, path: str):
+        """Write the configuration as a YAML file.
+
+        Args:
+            path (str): Path of the YAML file to be written to.
+
+        """
         with open(path, "w") as f:
             f.write(yaml.safe_dump(self.model_dump(), sort_keys=False, indent=2))
