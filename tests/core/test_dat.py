@@ -1,5 +1,3 @@
-import json
-from copy import deepcopy
 from io import BufferedReader, BytesIO
 from tempfile import NamedTemporaryFile
 from unittest.mock import Mock, call, mock_open, patch
@@ -49,6 +47,11 @@ def config() -> BigFileConfig:
     )
 
 
+@pytest.fixture
+def bigfile() -> BigFile:
+    return BigFile(size=0, folder_list=[])
+
+
 def test_hash_file_name():
     path = "tests\\test_data\\hello_file.drm"
     expected = 3261577552
@@ -92,6 +95,24 @@ def test_from_dat(config):
     assert bigfile.unmapped_data[0].contents == b"\x44" * 100
 
 
+@patch("os.path.exists")
+def test_from_dat_raises_not_found(mock_exists: Mock, config):
+    mock_exists.return_value = False
+
+    with pytest.raises(Exception, match=r"Input .* does not exist!"):
+        _ = from_dat(DAT_PATH, config)
+
+
+@patch("os.path.isfile")
+@patch("os.path.exists")
+def test_from_dat_raises_input_not_file(mock_exists: Mock, mock_isfile: Mock, config):
+    mock_exists.return_value = True
+    mock_isfile.return_value = False
+
+    with pytest.raises(Exception, match=r"Input .* is not a file!"):
+        _ = from_dat(DAT_PATH, config)
+
+
 def test_from_unpacked(config):
     bigfile = from_unpacked(UNPACKED_PATH, config)
 
@@ -123,14 +144,31 @@ def test_from_unpacked_raises_input_is_not_dir(
         from_unpacked("some_file", config)
 
 
+@patch("cd_dat_utils.core.dat.BigFile.from_yaml")
 @patch("os.path.isdir")
 @patch("os.path.exists")
 @patch("builtins.open")
 def test_from_unpacked_raises_subfile_not_found(
-    _: Mock, mock_exists: Mock, mock_isdir: Mock, config
+    _mock_open: Mock,
+    mock_exists: Mock,
+    mock_isdir: Mock,
+    mock_from_yaml,
+    config,
+    bigfile,
 ):
     mock_exists.side_effect = [True, True, False]
     mock_isdir.return_value = True
+
+    bigfile.folder_list.append(
+        FolderEntry(
+            offset=0,
+            magic=0,
+            encryption=0,
+            file_list=[FileEntry(size=1, offset=1, hash=1, checksum=1)],
+        )
+    )
+
+    mock_from_yaml.return_value = bigfile
 
     with pytest.raises(Exception, match=r"File .* cannot be found!"):
         from_unpacked("some_file", config)
@@ -262,13 +300,15 @@ def test_pack_bigfile_writes_unmapped_data(
 @patch("shutil.rmtree")
 @patch("builtins.open")
 @patch("os.path.exists")
-def test_unpack_bigfile_writes_unmapped_data(mock_exists: Mock, mock_open: Mock, *_):
+def test_unpack_bigfile_writes_unmapped_data(
+    mock_exists: Mock, mock_open: Mock, _mock_rmtree, _mock_makedirs, config
+):
     unmapped_data = UnmappedEntry(size=1, offset=1234, contents=b"\x01")
 
     file = BigFile(size=1, folder_list=[], unmapped_data=[unmapped_data])
     mock_exists.return_value = False
 
-    unpack_bigfile(file, CONFIG, "fake_dir")
+    unpack_bigfile(file, "fake_dir", config)
 
     mock_open.assert_has_calls(
         [call("fake_dir/unmapped_data/unmapped_1234.bin", "wb")], True
@@ -279,7 +319,9 @@ def test_unpack_bigfile_writes_unmapped_data(mock_exists: Mock, mock_open: Mock,
 @patch("shutil.rmtree")
 @patch("builtins.open")
 @patch("os.path.exists")
-def test_unpack_bigfile_unknown_hashes(mock_exists: Mock, mock_open: Mock, *_):
+def test_unpack_bigfile_unknown_hashes(
+    mock_exists: Mock, mock_open: Mock, _mock_rmtree, _mock_makedirs, config
+):
     file_0 = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=b"\x01")
     file_1 = FileEntry(size=1, offset=1, hash=2, checksum=1, contents=b"\x01")
 
@@ -288,7 +330,7 @@ def test_unpack_bigfile_unknown_hashes(mock_exists: Mock, mock_open: Mock, *_):
     file = BigFile(size=1, folder_list=[folder])
     mock_exists.return_value = False
 
-    unpack_bigfile(file, CONFIG, "fake_dir")
+    unpack_bigfile(file, "fake_dir", config)
 
     mock_open.assert_has_calls(
         [call("fake_dir/1.bin", "wb"), call("fake_dir/2.bin", "wb")], True
@@ -299,7 +341,9 @@ def test_unpack_bigfile_unknown_hashes(mock_exists: Mock, mock_open: Mock, *_):
 @patch("shutil.rmtree")
 @patch("builtins.open")
 @patch("os.path.exists")
-def test_unpack_bigfile_known_hashes(mock_exists: Mock, mock_open: Mock, *_):
+def test_unpack_bigfile_known_hashes(
+    mock_exists: Mock, mock_open: Mock, _mock_rmtree, _mock_makedirs, config
+):
     file_0 = FileEntry(size=1, offset=1, hash=1, checksum=1, contents=b"\x01")
     file_1 = FileEntry(size=1, offset=1, hash=2, checksum=1, contents=b"\x01")
 
@@ -308,11 +352,10 @@ def test_unpack_bigfile_known_hashes(mock_exists: Mock, mock_open: Mock, *_):
     file = BigFile(size=1, folder_list=[folder])
     mock_exists.return_value = False
 
-    config = deepcopy(CONFIG)
-    config["file_names"]["1"] = "file_1.drm"
-    config["file_names"]["2"] = "file_2.chr"
+    config.file_map[1] = "file_1.drm"
+    config.file_map[2] = "file_2.chr"
 
-    unpack_bigfile(file, config, "fake_dir")
+    unpack_bigfile(file, "fake_dir", config)
 
     mock_open.assert_has_calls(
         [call("fake_dir/file_1.drm", "wb"), call("fake_dir/file_2.chr", "wb")], True
