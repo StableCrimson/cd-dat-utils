@@ -6,7 +6,7 @@ from unittest.mock import Mock, call, mock_open, patch
 
 import pytest
 
-from dat import (
+from cd_dat_utils.core.dat import (
     BigFile,
     FileEntry,
     FolderEntry,
@@ -27,7 +27,7 @@ from dat import (
     write_unmapped_data,
 )
 
-DAT_PATH = "tests/test_data/hello_dat.DAT"
+DAT_PATH = "tests/test_data/hello_cd_dat_utils.core.dat.DAT"
 UNPACKED_PATH = "tests/test_data/unpacked"
 CONFIG_PATH = "tests/test_data/test_config.json"
 
@@ -56,7 +56,7 @@ def test_read_file():
     assert parsed_file.contents == expected_contents.encode("ascii")
 
 
-@patch("dat.read_file")
+@patch("cd_dat_utils.core.dat.read_file")
 def test_read_folder(mock_read_file: Mock):
     folder_bytes = open("tests/test_data/hello_folder.bin", "rb").read()
     reader = BufferedReader(BytesIO(folder_bytes))
@@ -157,7 +157,7 @@ def test_write_file():
         assert f.read() == expected
 
 
-@patch("dat.write_file")
+@patch("cd_dat_utils.core.dat.write_file")
 def test_write_folder(mock_write_file: Mock):
     temp_folder = NamedTemporaryFile("wb")
 
@@ -193,8 +193,8 @@ def test_write_unmapped_data():
         assert f.read() == "this is unmapped data".encode("ascii")
 
 
-@patch("dat.write_unmapped_data")
-@patch("dat.write_folder")
+@patch("cd_dat_utils.core.dat.write_unmapped_data")
+@patch("cd_dat_utils.core.dat.write_folder")
 @patch("builtins.open")
 def test_pack_bigfile(mock_open: Mock, mock_write_folder: Mock, _):
     file = BigFile(size=1, folder_list=[Mock(FolderEntry)] * 2)
@@ -207,8 +207,8 @@ def test_pack_bigfile(mock_open: Mock, mock_write_folder: Mock, _):
     mock_open.assert_called_once_with("fake_dir", "wb", 0)
 
 
-@patch("dat.write_unmapped_data")
-@patch("dat.write_folder")
+@patch("cd_dat_utils.core.dat.write_unmapped_data")
+@patch("cd_dat_utils.core.dat.write_folder")
 @patch("builtins.open")
 def test_pack_bigfile_writes_unmapped_data(
     mock_open: Mock, mock_write_folder: Mock, mock_write_unmapped: Mock
@@ -375,7 +375,7 @@ def test_compare_file():
     assert "contents" in mismatches[4]
 
 
-@patch("dat.compare_file")
+@patch("cd_dat_utils.core.dat.compare_file")
 def test_compare_folder(mock_compare_file: Mock):
     a = FolderEntry(offset=0, magic=0, encryption=0, file_list=[Mock(FileEntry)] * 3)
     b = FolderEntry(offset=1, magic=1, encryption=1, file_list=[Mock(FileEntry)] * 4)
@@ -393,8 +393,8 @@ def test_compare_folder(mock_compare_file: Mock):
     assert mock_compare_file.call_count == 3
 
 
-@patch("dat.compare_folder")
-@patch("dat.compare_unmapped_data")
+@patch("cd_dat_utils.core.dat.compare_folder")
+@patch("cd_dat_utils.core.dat.compare_unmapped_data")
 def test_compare_bigfile(mock_compare_unmapped: Mock, mock_compare_folder: Mock):
     a = BigFile(
         size=0,

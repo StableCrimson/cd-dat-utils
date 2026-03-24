@@ -36,20 +36,32 @@ git+https://github.com/StableCrimson/cd-dat-utils
 To unpack a BIGFILE:
 
 ```bash
-cd-dat-utils unpack <src_file> <dest_dir> <config_path>
+cd-dat-utils unpack <config_path> [-i <src>] [-o <dest>]
 ```
+
+If `-i` is not specified, it will use `src_path` from the config.
+
+If `-o` is not specified, it will use `unpacked_path` from the config.
 
 To pack a folder into a BIGFILE:
 
 ```bash
-cd-dat-utils pack <src_dir> <dest_file> <config_path>
+cd-dat-utils pack <src_dir> [-i <src>] [-o <dest>]
 ```
+
+If `-i` is not specified, it will use `unpacked_path` from the config.
+
+If `-o` is not specified, it will use `packed_path` from the config.
 
 To compare 2 BIGFILEs (packed or unpacked):
 
 ```bash
-cd-dat-utils compare <path_a> <path_b> <config_path>
+cd-dat-utils compare <config_path> [-a <a>] [-b <b>]
 ```
+
+If `-a` is not specified, it will use `packed_path` from the config.
+
+If `-b` is not specified, it will use `unpacked_path` from the config.
 
 ## Configuration
 
