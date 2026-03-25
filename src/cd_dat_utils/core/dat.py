@@ -4,7 +4,7 @@ import shutil
 from io import BufferedWriter
 from pathlib import Path
 from struct import pack, unpack
-from typing import BinaryIO, Optional
+from typing import BinaryIO
 
 import pylibyaml  # Needed - Patches several `yaml` methods for huge performance improvements
 import yaml
@@ -297,8 +297,8 @@ def unpack_bigfile(bigfile: BigFile, path: str, config: BigFileConfig):
         for unmapped in bigfile.unmapped_data:
             if unmapped.contents is not None:
                 filename = f"unmapped_{unmapped.offset}.bin"
-                path = os.path.join(path, "unmapped_data", filename)
-                with open(path, "wb") as f:
+                segment_path = os.path.join(unmapped_folder, filename)
+                with open(segment_path, "wb") as f:
                     f.write(unmapped.contents)
 
     duplicates: dict[str, int] = {}
@@ -464,26 +464,6 @@ def from_unpacked(path: str, config: BigFileConfig) -> BigFile:
             unmapped.contents = f.read(unmapped.size)
 
     return bigfile
-
-
-def from_path(path: str, config: BigFileConfig) -> BigFile:
-    """Create a `BigFile` from either a packed or unpacked state.
-
-    Args:
-        path (str): Path to the BIGFILE.
-        config (BigFileConfig): The BIGFILE config.
-
-    Raises:
-        Exception: If path does not exist.
-
-    """
-    if not os.path.exists(path):
-        raise Exception(f"'{path}' does not exist!")
-
-    if os.path.isfile(path):
-        return from_dat(path, config)
-    else:
-        return from_unpacked(path, config)
 
 
 def compare_unmapped_data(

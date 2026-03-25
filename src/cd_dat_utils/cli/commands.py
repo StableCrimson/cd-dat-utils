@@ -1,15 +1,26 @@
+import os
 import sys
 from typing import Optional
 
-from cd_dat_utils.core.config import Config
+from cd_dat_utils.core.config import BigFileConfig, Config
 from cd_dat_utils.core.dat import (
+    BigFile,
     compare,
     from_dat,
-    from_path,
     from_unpacked,
     pack_bigfile,
     unpack_bigfile,
 )
+
+
+def _from_path(path: str, config: BigFileConfig) -> BigFile:
+    if not os.path.exists(path):
+        raise Exception(f"'{path}' does not exist!")
+
+    if os.path.isfile(path):
+        return from_dat(path, config)
+    else:
+        return from_unpacked(path, config)
 
 
 def command_pack(
@@ -20,6 +31,7 @@ def command_pack(
     if config.bigfile is None:
         print("`bigfile` not found in configuration!")
         sys.exit(1)
+        return
 
     if input is None:
         input = config.bigfile.unpacked_path
@@ -27,7 +39,7 @@ def command_pack(
     if output is None:
         # NOTE: Unreachable. packed_path is always a value,
         # the type checker just doesn't know that.
-        if config.bigfile.packed_path is None:  # noqa
+        if config.bigfile.packed_path is None:  # pragma: no cover
             return
 
         output = config.bigfile.packed_path
@@ -43,6 +55,7 @@ def command_unpack(
     if config.bigfile is None:
         print("`bigfile` not found in configuration!")
         sys.exit(1)
+        return
 
     if input is None:
         input = config.bigfile.src_path
@@ -61,11 +74,12 @@ def command_compare(
     if config.bigfile is None:
         print("`bigfile` not found in configuration!")
         sys.exit(1)
+        return
 
     if path_a is None:
         # NOTE: Unreachable. packed_path is always a value,
         # the type checker just doesn't know that.
-        if config.bigfile.packed_path is None:  # noqa
+        if config.bigfile.packed_path is None:  # pragma: no cover
             return
 
         path_a = config.bigfile.packed_path
@@ -73,13 +87,13 @@ def command_compare(
     if path_b is None:
         path_b = config.bigfile.unpacked_path
 
-    a = from_path(path_a, config.bigfile)
-    b = from_path(path_b, config.bigfile)
+    a = _from_path(path_a, config.bigfile)
+    b = _from_path(path_b, config.bigfile)
 
     mismatches = compare(a, b)
 
     if len(mismatches) > 0:
-        print(f"{len(mismatches)} differences found between '{path_a}' and '{path_b}:")
+        print(f"{len(mismatches)} differences found between '{path_a}' and '{path_b}':")
         for mismatch in mismatches:
             print(f"\t{mismatch}")
     else:
