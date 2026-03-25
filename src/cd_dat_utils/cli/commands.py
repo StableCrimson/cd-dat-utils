@@ -32,7 +32,7 @@ def command_pack(
 
         output = config.bigfile.packed_path
 
-    pack_bigfile(from_dat(input, config.bigfile), output)
+    pack_bigfile(from_unpacked(input, config.bigfile), output)
 
 
 def command_unpack(

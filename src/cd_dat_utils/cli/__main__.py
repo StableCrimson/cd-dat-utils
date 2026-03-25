@@ -1,6 +1,6 @@
 import argparse
 
-from cd_dat_utils.cli.cli import command_compare, command_pack, command_unpack
+from cd_dat_utils.cli.commands import command_compare, command_pack, command_unpack
 
 
 def main():  # noqa
