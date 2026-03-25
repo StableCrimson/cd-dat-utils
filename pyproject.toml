@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "cd-dat-utils"
 version = "0.0.0"
 description = "A command line utility for working with BIGFILEs"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ['pydantic==2.11.7', 'pylibyaml==0.1.0', 'pyyaml==6.0.3']
 
 [project.scripts]
