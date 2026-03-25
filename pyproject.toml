@@ -6,23 +6,39 @@ build-backend = "setuptools.build_meta"
 name = "cd-dat-utils"
 version = "0.0.0"
 description = "A command line utility for working with BIGFILEs"
-requires-python = ">=3.10"
-dependencies = ['pydantic==2.11.7', 'pyyaml==6.0.3']
+requires-python = ">=3.11"
+dependencies = ['pydantic==2.11.7', 'pylibyaml==0.1.0', 'pyyaml==6.0.3']
 
 [project.scripts]
-cd-dat-utils = "dat_utils:main"
+cd-dat-utils = "cd_dat_utils.cli.__main__:main"
 
 [dependency-groups]
-dev = ['pytest==9.0.1', 'pytest-cov==7.0.0', 'ruff', 'mypy']
+dev = ['pytest==9.0.1', 'pytest-cov==7.0.0', 'types-PyYAML', 'ruff', 'mypy']
 
 [tool.ruff.lint]
-select = ["I"]
+select = [
+  "I" # Import sorting
+]
+ignore = [
+  "D100", # Ignore missing docstrings for modules
+  "D104", # Ignore missing docstrings for packages
+]
+
+[tool.ruff.lint.per-file-ignores]
+"!src/cd_dat_utils/core/**" = ["D"] # Only care about docstrings in `cd_dat_utils.core`
 
 [tool.pytest]
-addopts = ["--cov=src", "--cov-report=term-missing"]
+addopts = ["--cov=cd_dat_utils", "--cov-report=term-missing"]
+
+[tool.coverage.run]
+branch = true  # Want coverage on branches, too
+
+[tool.coverage.report]
+skip_empty = true
 
 [tool.mypy]
 pretty = true
+ignore_missing_imports = true
 warn_redundant_casts = true
 warn_return_any = true
 warn_unreachable = true

@@ -2,6 +2,7 @@
 *.DAT
 output/
 *.json
+*.yaml
 *.bin
 *.drm
 
@@ -9,9 +10,10 @@ output/
 *.egg-info/
 .mypy_cache/
 .ruff_cache
+!.github/**
 
 # Only include sample data and config for testing
-!tests/test_data/*
+!tests/test_data/**
 
 # Testing
 .pytest_cache/

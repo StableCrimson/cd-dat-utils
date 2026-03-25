@@ -36,68 +36,71 @@ git+https://github.com/StableCrimson/cd-dat-utils
 To unpack a BIGFILE:
 
 ```bash
-cd-dat-utils unpack <src_file> <dest_dir> <config_path>
+cd-dat-utils unpack <config_path> [-i <src>] [-o <dest>]
 ```
+
+If `-i` is not specified, it will use `src_path` from the config.
+
+If `-o` is not specified, it will use `unpacked_path` from the config.
 
 To pack a folder into a BIGFILE:
 
 ```bash
-cd-dat-utils pack <src_dir> <dest_file> <config_path>
+cd-dat-utils pack <src_dir> [-i <src>] [-o <dest>]
 ```
+
+If `-i` is not specified, it will use `unpacked_path` from the config.
+
+If `-o` is not specified, it will use `packed_path` from the config.
 
 To compare 2 BIGFILEs (packed or unpacked):
 
 ```bash
-cd-dat-utils compare <path_a> <path_b> <config_path>
+cd-dat-utils compare <config_path> [-a <a>] [-b <b>]
 ```
 
-## Config
+If `-a` is not specified, it will use `packed_path` from the config.
 
-The JSON config is a required file. The structure of a BIGFILE will be written to this the first time it's unpacked. This structure is used later when repackaging the file.
+If `-b` is not specified, it will use `unpacked_path` from the config.
+
+## Configuration
+
+The YAML config is a required file. The tools uses several different files for configuration, but many of them are auto-generated during use. The only file required to be manually written is the main config file, which is outlined below.
 
 The structure of the config file is as follows:
 
-```json
-{
-  "structure": {
-    "size": 123456,
-    "folder_list": [
-      {
-        "offset": 1234,
-        "magic": 5678,
-        "encryption": 0,
-        "file_list": [
-          {
-            "size": 1234,
-            "offset": 5678,
-            "hash": 1234,
-            "checksum": 5678
-          },
-          ...
-        ]
-      },
-      ...
-    ]
-  },
-  "file_names": {
-    "file_hash": "file_name",
-    ...
-  },
-  "unmapped_data": [
-    {
-      "size": 123456,
-      "offset": 7890
-    },
-    ...
-  ]
-}
+```yaml
+bigfile:
+  src_path: BIGFILE.DAT
+  packed_path: packed.DAT
+  unpacked_path: output
+  structure_path: bigfile.yaml
+  file_map_path: symbols.yaml
 ```
 
-- `structure` - The serialized structure of the file. Required for packing. This will be automatically written to the config file when unpacking for the first time.
+### `bigfile`
 
-- `file_names` - Optional. A map of file hashes to their respective names. Used for naming files during unpacking, and reading files during repacking. Files without name mappings will be named `<file_hash>.bin`.
+This optional section contains the BIGFILE configuration. Required for BIGFILE operations.
 
-- `unmapped_data` - Optional. Stores the byte offsets and sizes of any non-padding data that is not considered a file. Not needed to package the file but may be required for a perfect match. When unpacking, these segments will be written to `<output_dir>/unmapped_data/unmapped_<offset>.bin` in the output directory.
+| Field            | Type  | Required | Description                                                                                       |
+| ---------------- | ----- | -------- | ------------------------------------------------------------------------------------------------- |
+| `src_path`       | `str` | Yes      | Path to the original DAT file                                                                     |
+| `unpacked_path`  | `str` | Yes      | Directory where the unpacked contents will be placed                                              |
+| `packed_path`    | `str` | No       | Path of the newly repacked BIGFILE. If not specified, will default to `src_path`                  |
+| `structure_path` | `str` | Yes      | Where the serialized structure will be written to. Will be auto-generated, does not need to exist |
+| `file_map_path`  | `str` | No       | Path to the YAML file mapping file hashes to their names                                          |
+
+### The File Map
+
+The file map (whose path is recorded in `file_map_path` in the config) is an optional file, but immensely helpful when working with unpacked files. It is just a YAML file mapping file hashes to their output paths. Ex:
+
+```yaml
+2576260384: game\object\ov1.drm
+2576293153: game\object\ov1.crm
+2576293152: game\maps\areaIntro.drm
+2576293157: game\object\enemy.smf
+2576293158: game\object\enemy.snf
+```
 
 ---
 
@@ -108,4 +111,3 @@ BIGFILE spec from [PlayStation Specification psx-spx](https://psx-spx.consoledev
 - [ ] Encryption support
 - [ ] Compression + decompression
 - [ ] Overlay utils (undo and redo mem relocation)
-- [ ] Config as YAML file

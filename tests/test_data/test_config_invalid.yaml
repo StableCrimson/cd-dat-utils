@@ -1,0 +1,3 @@
+bigfile:
+  src_path: tests/test_data/hello_dat.DAT
+  unpacked_path: tests/test_data/unpacked

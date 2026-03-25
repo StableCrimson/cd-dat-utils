@@ -1,4 +1,3 @@
-import argparse
 import json
 import os
 import shutil
@@ -7,24 +6,30 @@ from pathlib import Path
 from struct import pack, unpack
 from typing import BinaryIO
 
+import pylibyaml  # Needed - Patches several `yaml` methods for huge performance improvements
+import yaml
 from pydantic import BaseModel, Field
+
+from cd_dat_utils.core.config import BigFileConfig
 
 PADDING = 0
 
 BIGFILE_HEADER_SIZE = 4
-"""Size in bytes of BIGFILE header"""
+"""Size in bytes of BIGFILE header."""
 
 FOLDER_ENTRY_SIZE = 8
-"""Size in bytes of folder entry"""
+"""Size in bytes of folder entry."""
 
 FOLDER_RECORD_SIZE = 4
-"""Size in bytes of folder header preceding files"""
+"""Size in bytes of folder header preceding files."""
 
 FILE_ENTRY_SIZE = 16
-"""Size in bytes of file entry"""
+"""Size in bytes of file entry."""
 
 
 class FileEntry(BaseModel):
+    """A parsed file header and its contents."""
+
     size: int
     offset: int
     hash: int
@@ -33,16 +38,76 @@ class FileEntry(BaseModel):
 
 
 class FolderEntry(BaseModel):
+    """A parsed folder header and its constituent files."""
+
     offset: int
     magic: int
     encryption: int
     file_list: list[FileEntry]
 
 
+class UnmappedEntry(BaseModel):
+    """Parsed segment of unmapped non-padding data and its contents."""
+
+    size: int
+    offset: int
+    contents: bytes | None = Field(exclude=True, default=None)
+
+
 class BigFile(BaseModel):
+    """A fully parsed BIGFILE."""
+
     size: int
     folder_list: list[FolderEntry]
-    unmapped_data: list[FileEntry] = Field(exclude=True, default=[])
+    unmapped_data: list[UnmappedEntry] = Field(default=[])
+
+    @classmethod
+    def from_json(cls, path: str):
+        """Create a `BigFile` instance from a JSON file.
+
+        Args:
+            path (str): Path to the JSON file.
+
+        Returns:
+            BigFile: The deserialized BIGFILE.
+
+        """
+        with open(path) as f:
+            return cls.model_validate(json.load(f) or {})
+
+    def write_json(self, path: str):
+        """Write a `BigFile` instance to a JSON file.
+
+        Args:
+            path (str): Path to the JSON file.
+
+        """
+        with open(path, "w") as f:
+            json.dump(self.model_dump(), f, indent=2)
+
+    @classmethod
+    def from_yaml(cls, path: str):
+        """Create a `BigFile` instance from a YAML file.
+
+        Args:
+            path (str): Path to the YAML file.
+
+        Returns:
+            BigFile: The deserialized BIGFILE.
+
+        """
+        with open(path) as f:
+            return cls.model_validate(yaml.safe_load(f) or {})
+
+    def write_yaml(self, path: str):
+        """Write a `BigFile` instance to a YAML file.
+
+        Args:
+            path (str): Path to the JSON file.
+
+        """
+        with open(path, "w") as f:
+            f.write(yaml.safe_dump(self.model_dump(), sort_keys=False, indent=2))
 
 
 # TODO: If this isn't used in multiple CD titles, make a function table with the different hash methods so
@@ -87,9 +152,11 @@ def hash_from_file_path(file_path: str) -> int:
     return (length << 27) | (sum << 15) | (xor << 3) | ext_index
 
 
+# TODO: Make all of these class methods
+
+
 def read_file(file: BinaryIO, header_offset: int) -> FileEntry:
-    """Given a binary bytestream and a file header offset,
-    read the header and contents to create a `FileEntry`.
+    """Given a binary bytestream and a file header offset, read the header and contents to create a `FileEntry`.
 
     Args:
         file (BinaryIO): The binary source to read from.
@@ -125,7 +192,7 @@ def read_folder(file: BinaryIO, header_offset: int) -> FolderEntry:
     Raises:
         AssertionError: If the folder contains encryption, which is not supported at this time.
         AssertionError: If there is a mismatch between the number of files stated in the folder header and
-                        the actual folder record
+                        the actual folder record.
 
     """
     file.seek(header_offset)
@@ -155,19 +222,27 @@ def read_folder(file: BinaryIO, header_offset: int) -> FolderEntry:
     return folder
 
 
-def from_dat(path: str, config: dict, config_path: str) -> BigFile:
+def from_dat(path: str, config: BigFileConfig) -> BigFile:
     """Create a `BigFile` instance from a packed DAT.
 
     Args:
-        path (str): The path to the DAT file.
-        config (dict): The BIGFILE config.
-        config_path (str): Path to the config file. Used to automatically write the BIGFILE
-                            structure if not already present in the config.
+        path (str): Path to the DAT.
+        config (BigFileConfig): The BIGFILE config.
 
     Returns:
         BigFile: The parsed BIGFILE.
 
+    Raises:
+        Exception: Source path does not exist.
+        Exception: Source path exists, but is not a file.
+
     """
+    if not os.path.exists(path):
+        raise Exception(f"Input {path} does not exist!")
+
+    if not os.path.isfile(path):
+        raise Exception(f"Input {path} is not a file!")
+
     with open(path, "rb") as file:
         file.seek(0, os.SEEK_END)
         size = file.tell()
@@ -181,45 +256,40 @@ def from_dat(path: str, config: dict, config_path: str) -> BigFile:
             offset = (i * FOLDER_ENTRY_SIZE) + BIGFILE_HEADER_SIZE
             bigfile.folder_list.append(read_folder(file, offset))
 
-        unmapped_data = config.get("unmapped_data", [])
+        if not os.path.exists(config.structure_path):
+            bigfile.write_yaml(config.structure_path)
+        else:
+            structure = BigFile.from_yaml(config.structure_path)
 
-        for unmapped in unmapped_data:
-            file.seek(unmapped["offset"])
-            bigfile.unmapped_data.append(
-                FileEntry(
-                    size=unmapped["size"],
-                    offset=unmapped["offset"],
-                    hash=0,
-                    checksum=0,
-                    contents=file.read(unmapped["size"]),
+            for unmapped in structure.unmapped_data:
+                file.seek(unmapped.offset)
+                bigfile.unmapped_data.append(
+                    UnmappedEntry(
+                        size=unmapped.size,
+                        offset=unmapped.offset,
+                        contents=file.read(unmapped.size),
+                    )
                 )
-            )
-
-        if config.get("structure") is None:
-            print("File structure not found in config. Writing...")
-            config["structure"] = bigfile.model_dump()
-            with open(config_path, "w") as f:
-                json.dump(config, f, indent=2)
 
         return bigfile
 
 
-def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
+def unpack_bigfile(bigfile: BigFile, path: str, config: BigFileConfig):
     """Unpack a parsed BIGFILE to a target folder.
 
     Args:
         bigfile (BigFile): Parsed BIGFILE to be unpacked.
-        config (dict): The BIGFILE config.
-        output_dir (str): Path to the directory where the unpacked contents will be written.
+        path (str): Path to write the unpacked BIGFILE to.
+        config (BigFileConfig): The BIGFILE config.
 
     """
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
+    if os.path.exists(path):
+        shutil.rmtree(path)
 
-    os.makedirs(output_dir)
+    os.makedirs(path)
 
     if len(bigfile.unmapped_data) > 0:
-        unmapped_folder = os.path.join(output_dir, "unmapped_data")
+        unmapped_folder = os.path.join(path, "unmapped_data")
 
         if not os.path.exists(unmapped_folder):
             Path(unmapped_folder).mkdir(parents=True, exist_ok=True)
@@ -227,17 +297,15 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
         for unmapped in bigfile.unmapped_data:
             if unmapped.contents is not None:
                 filename = f"unmapped_{unmapped.offset}.bin"
-                path = os.path.join(output_dir, "unmapped_data", filename)
-                with open(path, "wb") as f:
+                segment_path = os.path.join(unmapped_folder, filename)
+                with open(segment_path, "wb") as f:
                     f.write(unmapped.contents)
 
     duplicates: dict[str, int] = {}
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
-            file_name = config.get("file_names", {}).get(
-                str(file.hash), f"{file.hash}.bin"
-            )
+            file_name = config.file_map.get(file.hash, f"{file.hash}.bin")
 
             if file_name not in duplicates.keys():
                 duplicates[file_name] = 0
@@ -246,11 +314,11 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
                 base, ext = os.path.splitext(file_name)
                 file_name = f"{base}_duplicate{duplicates[file_name]}{ext}"
 
-            full_path = os.path.join(output_dir, file_name)
+            full_path = os.path.join(path, file_name)
 
             if "\\" in file_name:
                 *subfolders, file_name = file_name.split("\\")
-                subpath = os.path.join(output_dir, *subfolders)
+                subpath = os.path.join(path, *subfolders)
 
                 if not os.path.exists(subpath):
                     Path(subpath).mkdir(parents=True, exist_ok=True)
@@ -262,12 +330,12 @@ def unpack_bigfile(bigfile: BigFile, config: dict, output_dir: str):
                     outfile.write(file.contents)
 
 
-def write_unmapped_data(unmapped_data: FileEntry, buffer: BufferedWriter):
+def write_unmapped_data(unmapped_data: UnmappedEntry, buffer: BufferedWriter):
     """Write an unmapped segment to a BIGFILE.
 
     Args:
-        unmapped_data (FileEntry): The FileEntry of the corresponding unmapped region to be written.
-        buffer (BufferedWriter): The buffer the unmapped region will be written to.
+        unmapped_data (UnmappedEntry): The unmapped segment to be written.
+        buffer (BufferedWriter): The buffer the unmapped segment will be written to.
 
     """
     if unmapped_data.contents is not None:
@@ -312,15 +380,15 @@ def write_folder(folder: FolderEntry, header_offset: int, buffer: BufferedWriter
         write_file(file, offset, buffer)
 
 
-def pack_bigfile(bigfile: BigFile, output_path: str):
+def pack_bigfile(bigfile: BigFile, path: str):
     """Packs and writes a `BigFile` object to a DAT.
 
     Args:
         bigfile (BigFile): The BigFile to be written.
-        output_path (str): The desired path of the resulting DAT file.
+        path (str): Path to write the packed BIGFILE to.
 
     """
-    with open(output_path, "wb", 0) as f:
+    with open(path, "wb", 0) as f:
         with BufferedWriter(f, bigfile.size) as buffer:
             buffer.write(pack("<HH", len(bigfile.folder_list), PADDING))
 
@@ -332,36 +400,40 @@ def pack_bigfile(bigfile: BigFile, output_path: str):
                 write_unmapped_data(unmapped, buffer)
 
 
-def from_unpacked(input_dir: str, config: dict) -> BigFile:
+def from_unpacked(path: str, config: BigFileConfig) -> BigFile:
     """Create a `BigFile` instance from an unpacked DAT.
 
     Args:
-        input_dir (str): The path to the unpacked BIGFILE directory.
-        config (dict): The BIGFILE config..
+        path (str): Path to the unpacked DAT.
+        config (BigFileConfig): The BIGFILE config
+
 
     Returns:
         BigFile: The parsed BIGFILE.
 
     Raises:
-        Exception: If the source directory cannot be found
-        Exception: If the config does not contain the `structure` component
-        Exception: If one of the unpacked files cannot be found
+        Exception: If the source directory cannot be found.
+        Exception: If the source exists but is not a directory.
+        Exception: If the config does not contain the `structure` component.
+        Exception: If one of the unpacked files cannot be found.
 
     """
-    if not os.path.exists(input_dir):
-        raise Exception(f"Input directory {input_dir} does not exist")
+    if not os.path.exists(path):
+        raise Exception(f"Input directory {path} does not exist!")
 
-    if config.get("structure") is None:
-        raise Exception("'structure' does not exist in config file!")
+    if not os.path.isdir(path):
+        raise Exception(f"Input {path} is a file!")
 
-    bigfile = BigFile.model_validate_json(json.dumps(config["structure"]))
+    if not os.path.exists(config.structure_path):
+        raise Exception(f"BIGFILE structure '{config.structure_path}' does not exist!")
+
+    bigfile: BigFile = BigFile.from_yaml(config.structure_path)
 
     already_read_files: dict[str, int] = {}
-    file_names: dict[str, str] = config.get("file_names", {})
 
     for folder in bigfile.folder_list:
         for file in folder.file_list:
-            file_name = file_names.get(str(file.hash), f"{file.hash}.bin")
+            file_name = config.file_map.get(file.hash, f"{file.hash}.bin")
 
             if already_read_files.get(file_name) is None:
                 already_read_files[file_name] = 0
@@ -370,11 +442,11 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
                 name, ext = file_name.rsplit(".", 1)
                 file_name = f"{name}_duplicate{already_read_files[file_name]}.{ext}"
 
-            full_file_path = os.path.join(input_dir, file_name)
+            full_file_path = os.path.join(path, file_name)
 
             if "\\" in file_name:
                 *subfolders, file_name = file_name.split("\\")
-                subpath = os.path.join(input_dir, *subfolders)
+                subpath = os.path.join(path, *subfolders)
 
                 full_file_path = os.path.join(subpath, file_name)
 
@@ -382,32 +454,26 @@ def from_unpacked(input_dir: str, config: dict) -> BigFile:
                 raise Exception(f"File {full_file_path} cannot be found!")
 
             with open(full_file_path, "rb") as f:
-                file.contents = f.read()
+                file.contents = f.read(file.size)
 
-    unmapped_data = config.get("unmapped_data", [])
+    for unmapped in bigfile.unmapped_data:
+        filename = f"unmapped_{unmapped.offset}.bin"
+        segment_path = os.path.join(path, "unmapped_data", filename)
 
-    for unmapped in unmapped_data:
-        filename = f"unmapped_{unmapped['offset']}.bin"
-        with open(os.path.join(input_dir, "unmapped_data", filename), "rb") as f:
-            bigfile.unmapped_data.append(
-                FileEntry(
-                    size=unmapped["size"],
-                    offset=unmapped["offset"],
-                    hash=0,
-                    checksum=0,
-                    contents=f.read(),
-                )
-            )
+        with open(segment_path, "rb") as f:
+            unmapped.contents = f.read(unmapped.size)
 
     return bigfile
 
 
-def compare_unmapped_data(a: FileEntry, b: FileEntry, segment_idx: int) -> list[str]:
+def compare_unmapped_data(
+    a: UnmappedEntry, b: UnmappedEntry, segment_idx: int
+) -> list[str]:
     """Compare two unmapped data segments.
 
     Args:
-        a (FileEntry): The first segment in the comparison.
-        b (FileEntry): The second segment in the comparison.
+        a (UnmappedEntry): The first segment in the comparison.
+        b (UnmappedEntry): The second segment in the comparison.
         segment_idx (int): Index of the unmapped segment.
 
     Returns:
@@ -552,104 +618,3 @@ def compare(a: BigFile, b: BigFile) -> list[str]:
         mismatches.extend(compare_folder(folder_a, folder_b, i))
 
     return mismatches
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        prog="cd-dat-utils",
-        description="A command line utility for working with BIGFILEs",
-    )
-
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    pack_parser = subparsers.add_parser(
-        name="pack", help="Pack files", description="Pack files"
-    )
-    pack_parser.add_argument("input", help="Input path")
-    pack_parser.add_argument("output", help="Output path")
-    pack_parser.add_argument(
-        "config",
-        default="config.json",
-        help="Path to JSON config. Defaults to 'config.json'",
-    )
-
-    unpack_parser = subparsers.add_parser(
-        name="unpack", help="Unpack files", description="Unpack files"
-    )
-    unpack_parser.add_argument("input", help="Input path")
-    unpack_parser.add_argument("output", help="Output path")
-    unpack_parser.add_argument(
-        "config",
-        default="config.json",
-        help="Path to JSON config. Defaults to 'config.json'",
-    )
-
-    compare_parser = subparsers.add_parser(
-        name="compare", help="Compare files", description="Compare files"
-    )
-    compare_parser.add_argument("input1", help="First input path")
-    compare_parser.add_argument("input2", help="Second input path")
-    compare_parser.add_argument(
-        "config", help="Path to JSON config. Defaults to 'config.json'"
-    )
-
-    compare_parser = subparsers.add_parser(
-        name="unrelocate",
-        help="Undo overlay memory address relocations",
-        description="Undo overlay memory address relocations",
-    )
-    compare_parser.add_argument("input", help="Path to the overlay")
-
-    args = parser.parse_args()
-
-    if not os.path.exists(args.config):
-        raise Exception(f"config file {args.config} could not be found")
-
-    with open(args.config) as f:
-        config = json.load(f)
-
-    match args.command:
-        case "unpack":
-            assert os.path.exists(args.input), (
-                f"Input file {args.input} does not exist!"
-            )
-            assert os.path.isfile(args.input), f"Input file {args.input} is not a file!"
-            unpack_bigfile(
-                from_dat(args.input, config, args.config), config, args.output
-            )
-        case "pack":
-            assert os.path.exists(args.input), (
-                f"Input directory {args.input} does not exist!"
-            )
-            assert os.path.isdir(args.input), (
-                f"Input directory {args.input} is not a directory!"
-            )
-            pack_bigfile(from_unpacked(args.input, config), args.output)
-        case "compare":
-            assert os.path.exists(args.input1), f"Input {args.input1} does not exist!"
-            assert os.path.exists(args.input2), f"Input {args.input2} does not exist!"
-
-            if os.path.isfile(args.input1):
-                a = from_dat(args.input1, config, args.config)
-            else:
-                a = from_unpacked(args.input1, config)
-
-            if os.path.isfile(args.input2):
-                b = from_dat(args.input2, config, args.config)
-            else:
-                b = from_unpacked(args.input2, config)
-
-            errors = compare(a, b)
-
-            if len(errors) > 0:
-                print(f"Differences found between '{args.input1}' and '{args.input2}:")
-                for error in errors:
-                    print(f"\t{error}")
-            else:
-                print(
-                    f"No differences found between '{args.input1}' and '{args.input2}'"
-                )
-
-
-if __name__ == "__main__":
-    main()
