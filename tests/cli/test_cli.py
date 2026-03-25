@@ -35,13 +35,11 @@ def config_with_bigfile() -> Config:
 
 
 @patch("cd_dat_utils.cli.commands.Config.from_yaml")
-@patch("sys.exit")
-def test_command_compare_fails_no_bigfile(mock_exit: Mock, mock_from_yaml: Mock):
+def test_command_compare_fails_no_bigfile(mock_from_yaml: Mock):
     mock_from_yaml.return_value = Config()
 
-    command_compare("some_path")
-
-    mock_exit.assert_called_once_with(1)
+    with pytest.raises(SystemExit):
+        command_compare("some_path")
 
 
 @patch("cd_dat_utils.cli.commands.compare")
@@ -119,13 +117,11 @@ def test_command_compare_reports_errors(
 
 
 @patch("cd_dat_utils.cli.commands.Config.from_yaml")
-@patch("sys.exit")
-def test_command_unpack_fails_no_bigfile(mock_exit: Mock, mock_from_yaml: Mock):
+def test_command_unpack_fails_no_bigfile(mock_from_yaml: Mock):
     mock_from_yaml.return_value = Config()
 
-    command_unpack("some_path")
-
-    mock_exit.assert_called_once_with(1)
+    with pytest.raises(SystemExit):
+        command_unpack("some_path")
 
 
 @patch("cd_dat_utils.cli.commands.from_dat")
@@ -185,13 +181,11 @@ def test_command_unpack_uses_defaults(
 
 
 @patch("cd_dat_utils.cli.commands.Config.from_yaml")
-@patch("sys.exit")
-def test_command_pack_fails_no_bigfile(mock_exit: Mock, mock_from_yaml: Mock):
+def test_command_pack_fails_no_bigfile(mock_from_yaml: Mock):
     mock_from_yaml.return_value = Config()
 
-    command_pack("some_path")
-
-    mock_exit.assert_called_once_with(1)
+    with pytest.raises(SystemExit):
+        command_pack("some_path")
 
 
 @patch("cd_dat_utils.cli.commands.from_unpacked")

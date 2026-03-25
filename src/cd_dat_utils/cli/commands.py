@@ -31,7 +31,6 @@ def command_pack(
     if config.bigfile is None:
         print("`bigfile` not found in configuration!")
         sys.exit(1)
-        return
 
     if input is None:
         input = config.bigfile.unpacked_path
@@ -55,7 +54,6 @@ def command_unpack(
     if config.bigfile is None:
         print("`bigfile` not found in configuration!")
         sys.exit(1)
-        return
 
     if input is None:
         input = config.bigfile.src_path
@@ -74,7 +72,6 @@ def command_compare(
     if config.bigfile is None:
         print("`bigfile` not found in configuration!")
         sys.exit(1)
-        return
 
     if path_a is None:
         # NOTE: Unreachable. packed_path is always a value,
