@@ -55,6 +55,9 @@ class OverlayConfig(BaseModel):
     out_path: str
     """Path to the un-relocated ovelay"""
 
+    preserve_original: bool = Field(default=False)
+    """Whether or not to output the original module without relocations applied"""
+
     # TODO: Allow optional flag to create splat config
 
 

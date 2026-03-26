@@ -131,10 +131,18 @@ def undrm(config: OverlayConfig):
                 write_u32(mod_new, r + ((MODULE_BASE // 4) & 0x03FFFFFF))
 
     mod_new.seek(0)
-    Path(config.out_path).mkdir(parents=True, exist_ok=True)
 
-    with open(config.out_path, "wb") as f:
+    mod_path = Path(config.out_path)
+    mod_name = mod_path.stem
+    output_dir = mod_path.parent
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(output_dir / f"{mod_name}.bin", "wb") as f:
         f.write(mod_new.read())
 
+    if config.preserve_original:
+        with open(output_dir / f"{mod_name}.orig.bin", "wb") as f:
+            f.write(mod_bytes)
+
     # TODO: Config flags to create splat YAML
-    # TODO: Config flags to preserve original mod

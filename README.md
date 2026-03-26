@@ -80,7 +80,7 @@ overlays:
   - name: MyOverlay
     src_path: ov1.drm
     out_path: ov1.bin
-    relocs_path: ov1_relocs.yaml
+    preserve_original: true
   - name: MyOtherOverlay
     src_path: ov2.drm
     out_path: ov2.bin
@@ -102,11 +102,12 @@ This optional section contains the BIGFILE configuration. Required for BIGFILE o
 
 This optional section contains a list of configurations for all overlays. Required for overlay operations.
 
-| Field      | Type  | Required | Description                                                                    |
-| ---------- | ----- | -------- | ------------------------------------------------------------------------------ |
-| `name`     | `str` | Yes      | Overlay name                                                                   |
-| `src_path` | `str` | Yes      | Path to the binary containing the overlay. Often ends with `.drm`              |
-| `out_path` | `str` | Yes      | Path to where the extracted and memory patched overlay module will be written. |
+| Field               | Type   | Required | Description                                                                                         |
+| ------------------- | ------ | -------- | --------------------------------------------------------------------------------------------------- |
+| `name`              | `str`  | Yes      | Overlay name                                                                                        |
+| `src_path`          | `str`  | Yes      | Path to the binary containing the overlay. Often ends with `.drm`                                   |
+| `out_path`          | `str`  | Yes      | Path to where the extracted and memory patched overlay module will be written.                      |
+| `preserve_original` | `bool` | No       | Whether or not to also output the overlay module before relocations are applied. Default is `false` |
 
 ### The File Map
 
