@@ -84,6 +84,7 @@ overlays:
   - name: MyOtherOverlay
     src_path: ov2.drm
     out_path: ov2.bin
+    splat_yaml_path: ov2.yaml
 ```
 
 ### `bigfile`
@@ -102,12 +103,13 @@ This optional section contains the BIGFILE configuration. Required for BIGFILE o
 
 This optional section contains a list of configurations for all overlays. Required for overlay operations.
 
-| Field               | Type   | Required | Description                                                                                         |
-| ------------------- | ------ | -------- | --------------------------------------------------------------------------------------------------- |
-| `name`              | `str`  | Yes      | Overlay name                                                                                        |
-| `src_path`          | `str`  | Yes      | Path to the binary containing the overlay. Often ends with `.drm`                                   |
-| `out_path`          | `str`  | Yes      | Path to where the extracted and memory patched overlay module will be written.                      |
-| `preserve_original` | `bool` | No       | Whether or not to also output the overlay module before relocations are applied. Default is `false` |
+| Field               | Type   | Required | Description                                                                                               |
+| ------------------- | ------ | -------- | --------------------------------------------------------------------------------------------------------- |
+| `name`              | `str`  | Yes      | Overlay name                                                                                              |
+| `src_path`          | `str`  | Yes      | Path to the binary containing the overlay. Often ends with `.drm`                                         |
+| `out_path`          | `str`  | Yes      | Path to where the extracted and memory patched overlay module will be written.                            |
+| `preserve_original` | `bool` | No       | Whether or not to also output the overlay module before relocations are applied. Default is `false`       |
+| `splat_yaml_path`   | `str`  | No       | If provided, a skeleton `splat` configuration for the overlay will be output if it does not already exist |
 
 ### The File Map
 

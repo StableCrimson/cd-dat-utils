@@ -49,6 +49,9 @@ class BigFileConfig(BaseModel):
 class OverlayConfig(BaseModel):
     """Configuration for a single overlay."""
 
+    name: str
+    """Name of the overlay"""
+
     src_path: str
     """Path to the source overlay binary"""
 
@@ -58,7 +61,8 @@ class OverlayConfig(BaseModel):
     preserve_original: bool = Field(default=False)
     """Whether or not to output the original module without relocations applied"""
 
-    # TODO: Allow optional flag to create splat config
+    splat_yaml_path: Optional[str] = Field(default=None)
+    """Path to write skeleton `splat` configuration to if it doesn't already exist"""
 
 
 class Config(BaseModel):
