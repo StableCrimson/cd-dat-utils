@@ -11,6 +11,7 @@ from cd_dat_utils.core.dat import (
     pack_bigfile,
     unpack_bigfile,
 )
+from cd_dat_utils.core.overlays import undrm
 
 
 def _from_path(path: str, config: BigFileConfig) -> BigFile:
@@ -95,3 +96,14 @@ def command_compare(
             print(f"\t{mismatch}")
     else:
         print(f"No differences found between '{path_a}' and '{path_b}'")
+
+
+def command_undrm(config_path: str):
+    config = Config.from_yaml(config_path)
+
+    if config.overlays is None:
+        print("`overlays` not found in configuration!")
+        sys.exit(1)
+
+    for overlay in config.overlays:
+        undrm(overlay)
