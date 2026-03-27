@@ -17,7 +17,8 @@ dev = ['pytest==9.0.1', 'pytest-cov==7.0.0', 'types-PyYAML', 'ruff', 'mypy']
 
 [tool.ruff.lint]
 select = [
-  "I" # Import sorting
+  "I", # Import sorting
+  "D", # Docstring linting
 ]
 ignore = [
   "D100", # Ignore missing docstrings for modules
@@ -25,13 +26,15 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"!src/cd_dat_utils/core/**" = ["D"] # Only care about docstrings in `cd_dat_utils.core`
+"!src/cd_dat_utils/core/**" = [
+  "D",
+] # Only care about docstrings in `cd_dat_utils.core`
 
 [tool.pytest]
 addopts = ["--cov=cd_dat_utils", "--cov-report=term-missing"]
 
 [tool.coverage.run]
-branch = true  # Want coverage on branches, too
+branch = true # Want coverage on branches, too
 
 [tool.coverage.report]
 skip_empty = true
