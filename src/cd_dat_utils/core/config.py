@@ -46,11 +46,33 @@ class BigFileConfig(BaseModel):
         return self
 
 
+class OverlayConfig(BaseModel):
+    """Configuration for a single overlay."""
+
+    name: str
+    """Name of the overlay"""
+
+    src_path: str
+    """Path to the source overlay binary"""
+
+    out_path: str
+    """Path to the un-relocated ovelay"""
+
+    preserve_original: bool = Field(default=False)
+    """Whether or not to output the original module without relocations applied"""
+
+    splat_yaml_path: Optional[str] = Field(default=None)
+    """Path to write skeleton `splat` configuration to if it doesn't already exist"""
+
+
 class Config(BaseModel):
     """Configuration for the DAT utils."""
 
     bigfile: Optional[BigFileConfig] = Field(default=None)
     """Configuration for BIGFILE"""
+
+    overlays: Optional[list[OverlayConfig]] = Field(default=None)
+    """List of overlay configurations"""
 
     @classmethod
     def from_yaml(cls, path: str):

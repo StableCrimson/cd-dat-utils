@@ -6,9 +6,10 @@ from cd_dat_utils.cli.commands import (
     _from_path,
     command_compare,
     command_pack,
+    command_undrm,
     command_unpack,
 )
-from cd_dat_utils.core.config import BigFileConfig, Config
+from cd_dat_utils.core.config import BigFileConfig, Config, OverlayConfig
 from cd_dat_utils.core.dat import BigFile
 
 DAT_PATH = "tests/test_data/hello_dat.DAT"
@@ -31,6 +32,17 @@ def config_with_bigfile() -> Config:
                 2579342152: "dir_2\\test_file3.bin",
             },
         )
+    )
+
+
+@pytest.fixture
+def config_with_overlays() -> Config:
+    return Config(
+        overlays=[
+            OverlayConfig(
+                name="MyOverlay", src_path="myOverlay.drm", out_path="myOverlay.bin"
+            )
+        ]
     )
 
 
@@ -279,3 +291,22 @@ def test_from_path_uses_unpacked_for_folders(
     _ = _from_path("hello", config_with_bigfile.bigfile)
 
     mock_from_unpacked.assert_called_once()
+
+
+@patch("cd_dat_utils.cli.commands.Config.from_yaml")
+def test_command_undrm_fails_no_overlays(mock_from_yaml: Mock, config_with_overlays):
+    mock_from_yaml.return_value = Config()
+
+    with pytest.raises(SystemExit):
+        command_undrm("some_path")
+
+
+@patch("cd_dat_utils.cli.commands.undrm")
+@patch("cd_dat_utils.cli.commands.Config.from_yaml")
+def test_command_undrm_processes_each_overlay(
+    mock_from_yaml: Mock, mock_undrm: Mock, config_with_overlays
+):
+    mock_from_yaml.return_value = config_with_overlays
+    command_undrm("some_path")
+
+    assert mock_undrm.call_count == len(config_with_overlays.overlays)

@@ -3,7 +3,7 @@
 Utility for working with BIGFILEs in Crystal Dynamics games.
 
 > [!NOTE]
-> cd-dat-utils is still an experimental tool under development. Usage and configuration is subject to change. As of now, it is developed for use with the Legacy of Kain: Soul Reaver project. Compatibility for other CD titles _at this time_ is not guaranteed.
+> cd-dat-utils is developed for use with the Legacy of Kain: Soul Reaver project. Compatibility with other Crystal Dynamics titles is not guaranteed.
 
 ## Context
 
@@ -76,19 +76,40 @@ bigfile:
   unpacked_path: output
   structure_path: bigfile.yaml
   file_map_path: symbols.yaml
+overlays:
+  - name: MyOverlay
+    src_path: ov1.drm
+    out_path: ov1.bin
+    preserve_original: true
+  - name: MyOtherOverlay
+    src_path: ov2.drm
+    out_path: ov2.bin
+    splat_yaml_path: ov2.yaml
 ```
 
 ### `bigfile`
 
 This optional section contains the BIGFILE configuration. Required for BIGFILE operations.
 
-| Field            | Type  | Required | Description                                                                                       |
-| ---------------- | ----- | -------- | ------------------------------------------------------------------------------------------------- |
-| `src_path`       | `str` | Yes      | Path to the original DAT file                                                                     |
-| `unpacked_path`  | `str` | Yes      | Directory where the unpacked contents will be placed                                              |
-| `packed_path`    | `str` | No       | Path of the newly repacked BIGFILE. If not specified, will default to `src_path`                  |
-| `structure_path` | `str` | Yes      | Where the serialized structure will be written to. Will be auto-generated, does not need to exist |
-| `file_map_path`  | `str` | No       | Path to the YAML file mapping file hashes to their names                                          |
+| Field            | Type  | Required | Description                                                                                                                            |
+| ---------------- | ----- | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `src_path`       | `str` | Yes      | Path to the original DAT file                                                                                                          |
+| `unpacked_path`  | `str` | Yes      | Directory where the unpacked contents will be placed                                                                                   |
+| `packed_path`    | `str` | No       | Path of the newly repacked BIGFILE. If not specified, will default to `src_path`                                                       |
+| `structure_path` | `str` | Yes      | Where the serialized structure will be written to. Will be auto-generated. Will need to be updated if any unmapped data segments exist |
+| `file_map_path`  | `str` | No       | Path to the YAML file mapping file hashes to their names                                                                               |
+
+### `overlays`
+
+This optional section contains a list of configurations for all overlays. Required for overlay operations.
+
+| Field               | Type   | Required | Description                                                                                               |
+| ------------------- | ------ | -------- | --------------------------------------------------------------------------------------------------------- |
+| `name`              | `str`  | Yes      | Overlay name                                                                                              |
+| `src_path`          | `str`  | Yes      | Path to the binary containing the overlay. Often ends with `.drm`                                         |
+| `out_path`          | `str`  | Yes      | Path to where the extracted and memory patched overlay module will be written.                            |
+| `preserve_original` | `bool` | No       | Whether or not to also output the overlay module before relocations are applied. Default is `false`       |
+| `splat_yaml_path`   | `str`  | No       | If provided, a skeleton `splat` configuration for the overlay will be output if it does not already exist |
 
 ### The File Map
 
@@ -102,12 +123,20 @@ The file map (whose path is recorded in `file_map_path` in the config) is an opt
 2576293158: game\object\enemy.snf
 ```
 
+### The BIGFILE Structure
+
+The BIGFILE structure is something that is automatically generated. The only thing that you may need to is populate the `unmapped_data` segment. This is an optional field that contains the sizes and offsets for any non-padding data that is not considered a file. While optional, it in some instances may be required for a full match.
+
+The config is written as follows:
+
+```yaml
+unmapped_data:
+  - offset: 12288
+    size: 100
+  - offset: 12388
+    size: 100
+```
+
 ---
 
 BIGFILE spec from [PlayStation Specification psx-spx](https://psx-spx.consoledev.net/cdromfileformats/#legacy-of-kain-soul-reaver-bigfiledat)
-
-## Planned Features
-
-- [ ] Encryption support
-- [ ] Compression + decompression
-- [ ] Overlay utils (undo and redo mem relocation)

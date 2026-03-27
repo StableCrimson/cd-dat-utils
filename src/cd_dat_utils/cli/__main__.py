@@ -1,6 +1,11 @@
 import argparse
 
-from cd_dat_utils.cli.commands import command_compare, command_pack, command_unpack
+from cd_dat_utils.cli.commands import (
+    command_compare,
+    command_pack,
+    command_undrm,
+    command_unpack,
+)
 
 
 def main():  # noqa
@@ -11,6 +16,7 @@ def main():  # noqa
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # Pack
     pack_parser = subparsers.add_parser(
         name="pack", help="Pack files", description="Pack files"
     )
@@ -30,6 +36,7 @@ def main():  # noqa
         help="Path to write packed BIGFILE. Default to config if not provided.",
     )
 
+    # Unpack
     unpack_parser = subparsers.add_parser(
         name="unpack", help="Unpack files", description="Unpack files"
     )
@@ -49,6 +56,7 @@ def main():  # noqa
         help="Path to write unpacked BIGFILE. Default to config if not provided.",
     )
 
+    # Compare
     compare_parser = subparsers.add_parser(
         name="compare", help="Compare files", description="Compare files"
     )
@@ -66,12 +74,13 @@ def main():  # noqa
     )
     compare_parser.add_argument("config", help="Path to YAML config.")
 
-    compare_parser = subparsers.add_parser(
-        name="unrelocate",
-        help="Undo overlay memory address relocations",
-        description="Undo overlay memory address relocations",
+    # Un-DRM
+    undrm_parser = subparsers.add_parser(
+        name="undrm",
+        help="Perform memory relocations to generate a binary that can be decompiled",
+        description="Perform memory relocations to generate a binary that can be decompiled",
     )
-    compare_parser.add_argument("input", help="Path to the overlay")
+    undrm_parser.add_argument("config", help="Path to the YAML config.")
 
     args = parser.parse_args()
 
@@ -82,6 +91,8 @@ def main():  # noqa
             command_pack(args.config, args.input, args.output)
         case "compare":
             command_compare(args.config, args.a, args.b)
+        case "undrm":
+            command_undrm(args.config)
 
 
 if __name__ == "__main__":  # noqa
