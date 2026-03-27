@@ -67,7 +67,7 @@ def test_write_u32_masks_32_bits():
 
 
 def test_advance_to_sector_boundary():
-    bytes = BytesIO(b"\x00" * 100000)
+    bytes = BytesIO(b"\x00" * SECTOR_SIZE * 2)
     _advance_to_sector_boundary(bytes)
 
     assert bytes.tell() == 0

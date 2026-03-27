@@ -20,30 +20,6 @@ RELOC_MASK = 0x3
 """Mask used to retrieve relocation type"""
 
 
-def _read_s32(f: BinaryIO, peek: bool = False) -> int:
-    val: int = unpack("<i", f.read(4))[0]
-    if peek:
-        f.seek(-4, SEEK_CUR)
-    return val
-
-
-def _read_u32(f: BinaryIO, peek: bool = False) -> int:
-    val: int = unpack("<I", f.read(4))[0]
-    if peek:
-        f.seek(-4, SEEK_CUR)
-    return val
-
-
-def _write_u32(f: BinaryIO, val: int):
-    f.write(pack("<I", val & 0xFFFFFFFF))
-
-
-def _advance_to_sector_boundary(f: BinaryIO):
-    # Only advance if we're not already at a boundary
-    if f.tell() % SECTOR_SIZE != 0:
-        f.read(SECTOR_SIZE - (f.tell() % SECTOR_SIZE))
-
-
 class RelocType(IntEnum):
     """MIPS relocation types used for patching addresses at link/load time."""
 
@@ -90,6 +66,30 @@ class Reloc:
     type: RelocType
     addr: int
     addend: int = 0
+
+
+def _read_s32(f: BinaryIO, peek: bool = False) -> int:
+    val: int = unpack("<i", f.read(4))[0]
+    if peek:
+        f.seek(-4, SEEK_CUR)
+    return val
+
+
+def _read_u32(f: BinaryIO, peek: bool = False) -> int:
+    val: int = unpack("<I", f.read(4))[0]
+    if peek:
+        f.seek(-4, SEEK_CUR)
+    return val
+
+
+def _write_u32(f: BinaryIO, val: int):
+    f.write(pack("<I", val & 0xFFFFFFFF))
+
+
+def _advance_to_sector_boundary(f: BinaryIO):
+    # Only advance if we're not already at a boundary
+    if f.tell() % SECTOR_SIZE != 0:
+        f.read(SECTOR_SIZE - (f.tell() % SECTOR_SIZE))
 
 
 def _read_relocs(f: BinaryIO) -> list[Reloc]:

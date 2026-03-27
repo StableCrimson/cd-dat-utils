@@ -74,13 +74,13 @@ def main():  # noqa
     )
     compare_parser.add_argument("config", help="Path to YAML config.")
 
-    # Unrelocate
-    unrelocate_parser = subparsers.add_parser(
+    # Un-DRM
+    undrm_parser = subparsers.add_parser(
         name="undrm",
         help="Perform memory relocations to generate a binary that can be decompiled",
         description="Perform memory relocations to generate a binary that can be decompiled",
     )
-    unrelocate_parser.add_argument("config", help="Path to the YAML config.")
+    undrm_parser.add_argument("config", help="Path to the YAML config.")
 
     args = parser.parse_args()
 
