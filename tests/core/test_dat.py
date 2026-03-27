@@ -52,10 +52,10 @@ def bigfile() -> BigFile:
     return BigFile(size=0, folder_list=[])
 
 
-def test_hash_file_name():
-    path = "tests\\test_data\\hello_file.drm"
-    expected = 3261577552
-    assert hash_from_file_path(path) == expected
+def test_hash_from_file_path():
+    assert hash_from_file_path("tests\\test_data\\hello_file") == 3261577552
+    assert hash_from_file_path("tests\\test_data\\hello_file.snd") == 3261577556
+    assert hash_from_file_path("tests\\test_data\\hello_file.bin") == 3803655336
 
 
 def test_read_file():
