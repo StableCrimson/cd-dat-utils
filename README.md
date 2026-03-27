@@ -2,6 +2,9 @@
 
 Utility for working with BIGFILEs in Crystal Dynamics games.
 
+[![Code Checks](https://github.com/StableCrimson/cd-dat-utils/actions/workflows/verify.yaml/badge.svg)](https://github.com/StableCrimson/cd-dat-utils/actions/workflows/verify.yaml)
+[![Unit Tests](https://github.com/StableCrimson/cd-dat-utils/actions/workflows/unit-tests.yaml/badge.svg)](https://github.com/StableCrimson/cd-dat-utils/actions/workflows/unit-tests.yaml)
+
 > [!NOTE]
 > cd-dat-utils is developed for use with the Legacy of Kain: Soul Reaver project. Compatibility with other Crystal Dynamics titles is not guaranteed.
 
@@ -33,35 +36,41 @@ git+https://github.com/StableCrimson/cd-dat-utils
 
 ## Usage
 
-To unpack a BIGFILE:
+### To unpack a BIGFILE
 
 ```bash
-cd-dat-utils unpack <config_path> [-i <src>] [-o <dest>]
+cd-dat-utils unpack [-i <src>] [-o <dest>] <config_path>
 ```
 
-If `-i` is not specified, it will use `src_path` from the config.
+- If `-i` is not specified, it will use `src_path` from the config.
 
-If `-o` is not specified, it will use `unpacked_path` from the config.
+- If `-o` is not specified, it will use `unpacked_path` from the config.
 
-To pack a folder into a BIGFILE:
+### To pack a folder into a BIGFILE
 
 ```bash
-cd-dat-utils pack <src_dir> [-i <src>] [-o <dest>]
+cd-dat-utils pack [-i <src>] [-o <dest>] <config_path>
 ```
 
-If `-i` is not specified, it will use `unpacked_path` from the config.
+- If `-i` is not specified, it will use `unpacked_path` from the config.
 
-If `-o` is not specified, it will use `packed_path` from the config.
+- If `-o` is not specified, it will use `packed_path` from the config.
 
-To compare 2 BIGFILEs (packed or unpacked):
+### To compare 2 BIGFILEs (packed or unpacked)
 
 ```bash
-cd-dat-utils compare <config_path> [-a <a>] [-b <b>]
+cd-dat-utils compare [-a <a>] [-b <b>] <config_path>
 ```
 
-If `-a` is not specified, it will use `packed_path` from the config.
+- If `-a` is not specified, it will use `packed_path` from the config.
 
-If `-b` is not specified, it will use `unpacked_path` from the config.
+- If `-b` is not specified, it will use `unpacked_path` from the config.
+
+### To process overlays
+
+```bash
+cd-dat-utils undrm <config_path>
+```
 
 ## Configuration
 
@@ -125,7 +134,7 @@ The file map (whose path is recorded in `file_map_path` in the config) is an opt
 
 ### The BIGFILE Structure
 
-The BIGFILE structure is something that is automatically generated. The only thing that you may need to is populate the `unmapped_data` segment. This is an optional field that contains the sizes and offsets for any non-padding data that is not considered a file. While optional, it in some instances may be required for a full match.
+The BIGFILE structure is something that is automatically generated. The only thing that you may need to do is populate the `unmapped_data` segment. This is an optional field that contains the sizes and offsets for any non-padding data that is not considered a file. While optional, it in some instances may be required for a full match.
 
 The config is written as follows:
 

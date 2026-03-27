@@ -60,6 +60,7 @@ def main():  # noqa
     compare_parser = subparsers.add_parser(
         name="compare", help="Compare files", description="Compare files"
     )
+    compare_parser.add_argument("config", help="Path to YAML config.")
     compare_parser.add_argument(
         "-a",
         metavar="PATH",
@@ -72,7 +73,6 @@ def main():  # noqa
         help="Second input path. Defaults to `unpacked_path` in config.",
         required=False,
     )
-    compare_parser.add_argument("config", help="Path to YAML config.")
 
     # Un-DRM
     undrm_parser = subparsers.add_parser(
