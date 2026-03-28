@@ -44,7 +44,9 @@ def command_pack(
 
         output = config.bigfile.packed_path
 
+    print(f"Packing '{input}'...", end="")
     pack_bigfile(from_unpacked(input, config.bigfile), output)
+    print("Done")
 
 
 def command_unpack(
@@ -62,7 +64,9 @@ def command_unpack(
     if output is None:
         output = config.bigfile.unpacked_path
 
+    print(f"Unpacking '{input}'...", end="")
     unpack_bigfile(from_dat(input, config.bigfile), output, config.bigfile)
+    print("Done")
 
 
 def command_compare(
@@ -88,6 +92,7 @@ def command_compare(
     a = _from_path(path_a, config.bigfile)
     b = _from_path(path_b, config.bigfile)
 
+    print(f"Comparing {a} and {b}...")
     mismatches = compare(a, b)
 
     if len(mismatches) > 0:
@@ -106,4 +111,6 @@ def command_undrm(config_path: str):
         sys.exit(1)
 
     for overlay in config.overlays:
+        print(f"Processing {overlay.name}...", end="")
         undrm(overlay)
+        print("OK")
