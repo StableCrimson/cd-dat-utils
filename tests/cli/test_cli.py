@@ -101,9 +101,7 @@ def test_command_compare_reports_no_errors(
 
     command_compare("some_path", path_a="path_a", path_b="path_b")
 
-    mock_print.assert_called_once_with(
-        "No differences found between 'path_a' and 'path_b'"
-    )
+    mock_print.assert_called_with("No differences found between 'path_a' and 'path_b'")
 
 
 @patch("builtins.print")
